@@ -38,4 +38,20 @@
     <string name="players_none">Сейчас нет активных плееров.</string>
     <string name="player_shown">показывается</string>
     <string name="player_hidden">скрыт</string>
+
+    <string name="compact_widget_description">Компактный плеер 4×1: обложка, название и кнопка play</string>
+    <string name="cant_unlike">Плеер не даёт убрать трек из любимых</string>
+    <string name="no_shuffle">Плеер не поддерживает перемешивание</string>
+    <string name="no_repeat">Плеер не поддерживает повтор</string>
+    <string name="no_download">Плеер не даёт кнопку «скачать»</string>
+    <string name="already_downloaded">Трек уже скачан</string>
+
+    <string name="service_on">Фоновая служба: работает</string>
+    <string name="service_off">Фоновая служба: не запущена</string>
+    <string name="service_error">Фоновая служба не запустилась: %1$s</string>
+
+    <string name="diag_button">Диагностика</string>
+    <string name="diag_refresh">Обновить</string>
+    <string name="diag_copy">Скопировать</string>
+    <string name="diag_copied">Скопировано</string>
 </resources>

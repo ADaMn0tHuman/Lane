@@ -13,6 +13,7 @@ object Palette {
     val onPink = Color(0xFF1A1A1A)
     val text = Color(0xFFF2F2F2)
     val dim = Color(0xFF8E8E8E)
+    val muted = Color(0xFF555555)
     val track = Color(0xFF3A3A3A)
     val screenBg = Color(0xFF161616)
 }

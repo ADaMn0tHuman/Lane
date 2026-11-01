@@ -62,7 +62,7 @@ class MediaListener : NotificationListenerService() {
     override fun onListenerConnected() {
         connected = true
         instance = this
-        KeepAliveService.start(applicationContext)
+        KeepAliveService.ensure(applicationContext)
         registerScreenReceiver()
         val m = getSystemService(MediaSessionManager::class.java) ?: return
         manager = m

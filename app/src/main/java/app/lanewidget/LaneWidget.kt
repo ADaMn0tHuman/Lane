@@ -3,12 +3,12 @@ package app.lanewidget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import android.media.session.MediaController
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -69,7 +69,7 @@ class LaneWidgetReceiver : GlanceAppWidgetReceiver() {
     }
 }
 
-/** Нажатия на кнопки: назад / играть-пауза / вперёд / «Нравится». */
+/** Нажатия на кнопки: назад / играть-пауза / вперёд / «Нравится» / перемешать / повтор / скачать. */
 class ControlAction : ActionCallback {
 
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
@@ -77,39 +77,27 @@ class ControlAction : ActionCallback {
         val c = MediaRepo.pick(context, MediaRepo.controllers(context)) ?: return
         val t = c.transportControls
 
-        when (parameters[CMD]) {
-            "prev" -> t.skipToPrevious()
-            "next" -> t.skipToNext()
-            "like" -> like(context, c)
+        val message: String? = when (parameters[CMD]) {
+            "prev" -> { t.skipToPrevious(); null }
+            "next" -> { t.skipToNext(); null }
+            "like" -> PlayerControls.toggleLike(context, c)
+            "shuffle" -> PlayerControls.toggleShuffle(context, c)
+            "repeat" -> PlayerControls.cycleRepeat(context, c)
+            "download" -> PlayerControls.download(context, c)
             else -> {
                 val willPlay = !MediaRepo.isPlayingState(c.playbackState?.state)
                 MediaRepo.forcePlaying(willPlay)
                 if (willPlay) t.play() else t.pause()
+                null
             }
         }
+        if (message != null) toast(context, message)
 
         // Одно мгновенное обновление, а дальше виджет обновят колбэки плеера (MediaListener).
         // Ещё одно через секунду страхует случай, когда плеер не прислал колбэк.
         WidgetUpdater.refresh(context)
         delay(1000)
         WidgetUpdater.refresh(context)
-        // Галочку «Нравится» нужно вернуть обратно в плюс, когда она погаснет.
-        if (parameters[CMD] == "like") {
-            delay(1400)
-            WidgetUpdater.refresh(context)
-        }
-    }
-
-    private fun like(ctx: Context, c: MediaController) {
-        val action = MediaRepo.findLikeAction(ctx, c)
-        when {
-            action != null -> {
-                c.transportControls.sendCustomAction(action, action.extras)
-                MediaRepo.flashLiked()
-            }
-            MediaRepo.alreadyLiked(c) -> toast(ctx, ctx.getString(R.string.already_liked))
-            else -> toast(ctx, ctx.getString(R.string.no_like_action))
-        }
     }
 
     private fun toast(ctx: Context, text: String) {
@@ -121,24 +109,30 @@ class ControlAction : ActionCallback {
     }
 }
 
+/** Что происходит по нажатию на сам виджет: открыть плеер (или экран выдачи доступа). */
+@Composable
+internal fun openIntent(s: MediaState): Intent? {
+    val ctx = LocalContext.current
+    return when {
+        !s.hasAccess -> Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        s.packageName != null -> Intent(ctx, OpenPlayerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        else -> null
+    }
+}
+
 @Composable
 private fun WidgetContent(s: MediaState) {
-    val ctx = LocalContext.current
-    val launch: Intent? = if (!s.hasAccess) {
-        Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    } else {
-        s.packageName?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
-    }
+    val launch = openIntent(s)
 
     val root = GlanceModifier
         .fillMaxSize()
         .background(ColorProvider(Palette.card))
         .cornerRadius(30.dp)
-        .padding(12.dp)
+        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
     Row(modifier = root, verticalAlignment = Alignment.CenterVertically) {
-        Cover(s)
+        Cover(s, 84.dp, 20.dp)
         Column(
             modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -157,17 +151,17 @@ private fun WidgetContent(s: MediaState) {
                 maxLines = 1,
                 style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
             )
-            Spacer(modifier = GlanceModifier.height(6.dp))
+            Spacer(modifier = GlanceModifier.height(3.dp))
             ProgressRow(s)
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(2.dp))
             Controls(s)
         }
     }
 }
 
 @Composable
-private fun Cover(s: MediaState) {
-    val m = GlanceModifier.size(84.dp).cornerRadius(20.dp)
+internal fun Cover(s: MediaState, size: Dp, radius: Dp) {
+    val m = GlanceModifier.size(size).cornerRadius(radius)
     if (s.cover != null) {
         Image(
             provider = ImageProvider(s.cover),
@@ -183,7 +177,7 @@ private fun Cover(s: MediaState) {
             Image(
                 provider = ImageProvider(R.drawable.ic_music),
                 contentDescription = null,
-                modifier = GlanceModifier.size(32.dp),
+                modifier = GlanceModifier.size(size / 2.6f),
                 colorFilter = ColorFilter.tint(ColorProvider(Palette.pink)),
             )
         }
@@ -221,48 +215,85 @@ private fun ProgressRow(s: MediaState) {
     }
 }
 
-/** Четыре кнопки в равных ячейках: их центры стоят на одинаковом расстоянии и симметричны полосе. */
+/**
+ * Две строки по четыре равные ячейки.
+ * Сверху: назад, играть/пауза, вперёд, «нравится» (плюс или галочка).
+ * Снизу: перемешать под «назад», повтор под «вперёд», скачать под «нравится».
+ */
 @Composable
 private fun Controls(s: MediaState) {
-    Row(
-        modifier = GlanceModifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Cell { SideButton(R.drawable.ic_prev, "prev", Palette.text) }
-        Cell { PlayButton(s.playing) }
-        Cell { SideButton(R.drawable.ic_next, "next", Palette.text) }
-        Cell {
-            if (s.flash) {
-                SideButton(R.drawable.ic_check, "like", Palette.pink)
-            } else {
-                SideButton(R.drawable.ic_plus, "like", Palette.text)
+    Column(modifier = GlanceModifier.fillMaxWidth()) {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Cell(40.dp) { SideButton(R.drawable.ic_prev, "prev", Palette.text) }
+            Cell(40.dp) { PlayButton(s.playing, 40.dp) }
+            Cell(40.dp) { SideButton(R.drawable.ic_next, "next", Palette.text) }
+            Cell(40.dp) {
+                if (s.liked) {
+                    SideButton(R.drawable.ic_check, "like", Palette.pink)
+                } else {
+                    SideButton(R.drawable.ic_plus, "like", Palette.text)
+                }
+            }
+        }
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Cell(26.dp) {
+                MiniButton(
+                    R.drawable.ic_shuffle, "shuffle",
+                    miniTint(s.shuffleSupported, s.shuffleOn),
+                )
+            }
+            Cell(26.dp) { }
+            Cell(26.dp) {
+                MiniButton(
+                    if (s.repeatMode == 1) R.drawable.ic_repeat_one else R.drawable.ic_repeat, "repeat",
+                    miniTint(s.repeatSupported, s.repeatMode != 0),
+                )
+            }
+            Cell(26.dp) {
+                MiniButton(
+                    R.drawable.ic_download, "download",
+                    miniTint(s.downloadSupported, s.downloaded),
+                )
             }
         }
     }
 }
 
+/** Розовая: включено. Серая: доступно, но выключено. Тёмная: плеер этого не умеет. */
+private fun miniTint(supported: Boolean, on: Boolean): Color = when {
+    !supported -> Palette.muted
+    on -> Palette.pink
+    else -> Palette.dim
+}
+
 @Composable
-private fun RowScope.Cell(content: @Composable () -> Unit) {
+private fun RowScope.Cell(height: Dp, content: @Composable () -> Unit) {
     Box(
-        modifier = GlanceModifier.defaultWeight().height(44.dp),
+        modifier = GlanceModifier.defaultWeight().height(height),
         contentAlignment = Alignment.Center,
     ) { content() }
 }
 
 @Composable
-private fun PlayButton(playing: Boolean) {
+internal fun PlayButton(playing: Boolean, size: Dp) {
     Box(
         modifier = GlanceModifier
-            .size(44.dp)
+            .size(size)
             .background(ColorProvider(Palette.pink))
-            .cornerRadius(22.dp)
+            .cornerRadius(size / 2)
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "toggle"))),
         contentAlignment = Alignment.Center,
     ) {
         Image(
             provider = ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
             contentDescription = null,
-            modifier = GlanceModifier.size(24.dp),
+            modifier = GlanceModifier.size(size / 1.8f),
             colorFilter = ColorFilter.tint(ColorProvider(Palette.onPink)),
         )
     }
@@ -279,7 +310,26 @@ private fun SideButton(res: Int, cmd: String, tint: Color) {
         Image(
             provider = ImageProvider(res),
             contentDescription = null,
-            modifier = GlanceModifier.size(26.dp),
+            modifier = GlanceModifier.size(24.dp),
+            colorFilter = ColorFilter.tint(ColorProvider(tint)),
+        )
+    }
+}
+
+/** Маленькая кнопка нижнего ряда. Область нажатия шире самой иконки. */
+@Composable
+private fun MiniButton(res: Int, cmd: String, tint: Color) {
+    Box(
+        modifier = GlanceModifier
+            .width(40.dp)
+            .height(26.dp)
+            .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to cmd))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(res),
+            contentDescription = null,
+            modifier = GlanceModifier.size(18.dp),
             colorFilter = ColorFilter.tint(ColorProvider(tint)),
         )
     }

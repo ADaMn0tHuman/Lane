@@ -2,7 +2,6 @@ package app.lanewidget
 
 import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadata
@@ -13,8 +12,10 @@ import android.net.Uri
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.net.URL
 
 data class MediaState(
@@ -25,9 +26,16 @@ data class MediaState(
     val progress: Float,
     val packageName: String?,
     val hasAccess: Boolean,
-    val flash: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val liked: Boolean = false,
+    val shuffleSupported: Boolean = false,
+    val shuffleOn: Boolean = false,
+    val repeatSupported: Boolean = false,
+    /** 0 выключен, 1 один трек, 2 весь список. */
+    val repeatMode: Int = 0,
+    val downloadSupported: Boolean = false,
+    val downloaded: Boolean = false,
 )
 
 object MediaRepo {
@@ -36,14 +44,20 @@ object MediaRepo {
     private const val KEY_LAST = "last_pkg"
     private const val KEY_LIKE = "like_"
 
-    private val LIKE_WORDS = listOf("like", "love", "heart", "fav", "save", "нрав", "люб", "лайк", "избран", "сохран")
-    private val DISLIKE_WORDS = listOf("dislike", "не нрав", "дизлайк")
-    private val UNDO_WORDS = listOf("unlike", "unfav", "unsave", "remove", "delete", "удал", "убрать", "отменить")
+    internal val LIKE_WORDS = listOf("like", "love", "heart", "fav", "save", "нрав", "люб", "лайк", "избран", "сохран")
+    internal val DISLIKE_WORDS = listOf("dislike", "не нрав", "дизлайк")
+    internal val UNDO_WORDS = listOf("unlike", "unfav", "unsave", "remove", "delete", "удал", "убрать", "отменить")
+    internal val DOWNLOAD_WORDS = listOf("download", "скач", "offline", "оффлайн", "офлайн", "загруз", "без интернет", "без сети")
 
     // Мгновенная реакция кнопок: иконка меняется сразу, не дожидаясь ответа плеера.
     @Volatile private var forcedPlaying: Boolean? = null
     @Volatile private var forcedPlayingUntil = 0L
-    @Volatile private var likedUntil = 0L
+    @Volatile private var forcedLiked: Boolean? = null
+    @Volatile private var forcedLikedUntil = 0L
+
+    // Обложки, которые грузятся по ссылке, качаем в фоне, чтобы название трека не ждало картинку.
+    private val fetchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var fetchingKey: String? = null
 
     // Кэш обложки, загруженной по ссылке.
     private var coverKey: String? = null
@@ -85,8 +99,17 @@ object MediaRepo {
         else -> false
     }
 
-    fun flashLiked() {
-        likedUntil = SystemClock.elapsedRealtime() + 2200
+    fun forceLiked(value: Boolean) {
+        forcedLiked = value
+        forcedLikedUntil = SystemClock.elapsedRealtime() + 3000
+    }
+
+    /** «Лайкнут ли трек» с учётом нажатия, которое плеер ещё не подтвердил. */
+    fun effectiveLiked(real: Boolean): Boolean {
+        val forced = forcedLiked
+        if (forced != null && SystemClock.elapsedRealtime() < forcedLikedUntil && real != forced) return forced
+        if (forced != null) forcedLiked = null
+        return real
     }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -107,15 +130,8 @@ object MediaRepo {
     /** Просит систему заново привязать сервис, если его усыпили. */
     fun rebind(ctx: Context) {
         if (!hasAccess(ctx)) return
-        val cn = ComponentName(ctx, MediaListener::class.java)
-        runCatching { NotificationListenerService.requestRebind(cn) }
-        if (!MediaListener.connected) {
-            // Известный приём: выключить и включить компонент, тогда система привяжет сервис заново.
-            runCatching {
-                val pm = ctx.packageManager
-                pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-                pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-            }
+        runCatching {
+            NotificationListenerService.requestRebind(ComponentName(ctx, MediaListener::class.java))
         }
     }
 
@@ -150,7 +166,7 @@ object MediaRepo {
 
     // ---- «Нравится» через дополнительные действия плеера ----
 
-    private fun actionText(a: PlaybackState.CustomAction) = "${a.action} ${a.name}".lowercase()
+    internal fun actionText(a: PlaybackState.CustomAction) = "${a.action} ${a.name}".lowercase()
 
     fun findLikeAction(ctx: Context, c: MediaController): PlaybackState.CustomAction? {
         val actions = c.playbackState?.customActions.orEmpty()
@@ -159,15 +175,20 @@ object MediaRepo {
         }
         return actions.firstOrNull { a ->
             val s = actionText(a)
-            LIKE_WORDS.any { it in s } && DISLIKE_WORDS.none { it in s } && UNDO_WORDS.none { it in s }
+            LIKE_WORDS.any { it in s } && DISLIKE_WORDS.none { it in s } &&
+                UNDO_WORDS.none { it in s } && DOWNLOAD_WORDS.none { it in s }
         }
     }
 
-    fun alreadyLiked(c: MediaController): Boolean =
-        c.playbackState?.customActions.orEmpty().any { a ->
+    /** Действие «убрать из любимых»: слово отмены вместе со словом про «нравится». */
+    fun findUnlikeAction(c: MediaController): PlaybackState.CustomAction? =
+        c.playbackState?.customActions.orEmpty().firstOrNull { a ->
             val s = actionText(a)
-            UNDO_WORDS.any { it in s } && DISLIKE_WORDS.none { it in s }
+            UNDO_WORDS.any { it in s } && LIKE_WORDS.any { it in s } &&
+                DISLIKE_WORDS.none { it in s } && DOWNLOAD_WORDS.none { it in s }
         }
+
+    fun isLikedByActions(c: MediaController): Boolean = findUnlikeAction(c) != null
 
     // ---- Чтение состояния для виджета ----
 
@@ -219,17 +240,25 @@ object MediaRepo {
         if (duration > 0) position = position.coerceAtMost(duration)
         val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
+        val info = PlayerControls.info(ctx, c)
+
         return MediaState(
             title = title,
             artist = artist,
-            cover = loadCover(ctx, meta),
+            cover = CoverFade.frame(loadCover(ctx, meta)),
             playing = playing,
             progress = progress,
             packageName = c.packageName,
             hasAccess = true,
-            flash = now < likedUntil,
             positionMs = position,
             durationMs = duration,
+            liked = effectiveLiked(info.liked),
+            shuffleSupported = info.shuffleSupported,
+            shuffleOn = info.shuffleOn,
+            repeatSupported = info.repeatSupported,
+            repeatMode = info.repeatMode,
+            downloadSupported = info.downloadSupported,
+            downloaded = info.downloaded,
         )
     }
 
@@ -251,12 +280,23 @@ object MediaRepo {
             ?: return null
 
         if (uri == coverKey) return coverBitmap
-        val loaded = withContext(Dispatchers.IO) { fetch(ctx, uri) }
-        if (loaded != null) {
-            coverKey = uri
-            coverBitmap = loaded
+
+        // Обложки ещё нет: качаем в фоне. Пока показываем прошлую, а когда скачается, виджет
+        // обновится сам (с плавной сменой картинки). Название трека больше не ждёт сеть.
+        if (fetchingKey != uri) {
+            fetchingKey = uri
+            val app = ctx.applicationContext
+            fetchScope.launch {
+                val loaded = fetch(app, uri)
+                if (loaded != null) {
+                    coverKey = uri
+                    coverBitmap = loaded
+                }
+                fetchingKey = null
+                if (loaded != null) WidgetUpdater.refresh(app)
+            }
         }
-        return loaded
+        return coverBitmap
     }
 
     private fun fetch(ctx: Context, uriStr: String): Bitmap? = runCatching {

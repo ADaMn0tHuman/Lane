@@ -41,6 +41,29 @@
                 android:resource="@xml/lane_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".LaneCompactWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/lane_compact_widget_info" />
+        </receiver>
+
+        <activity
+            android:name=".OpenPlayerActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
+            android:name=".DiagnosticsActivity"
+            android:exported="false" />
+
         <service
             android:name=".MediaListener"
             android:exported="true"

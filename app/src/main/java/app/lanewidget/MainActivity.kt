@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var actionsBox: LinearLayout
     private lateinit var playersBox: LinearLayout
     private lateinit var batteryStatus: TextView
+    private lateinit var serviceStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +75,9 @@ class MainActivity : Activity() {
         batteryStatus = label("", 14f, Palette.pink.toArgb(), bold = true)
             .apply { setPadding(0, dp(12), 0, 0) }
         content.addView(batteryStatus)
+        serviceStatus = label("", 14f, Palette.pink.toArgb(), bold = true)
+            .apply { setPadding(0, dp(6), 0, 0) }
+        content.addView(serviceStatus)
         content.addView(
             pillButton(getString(R.string.battery_button)) { requestBatteryExemption() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) },
@@ -91,6 +95,11 @@ class MainActivity : Activity() {
         content.addView(label(getString(R.string.players_hint), 14f, Palette.dim.toArgb()))
         playersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(playersBox)
+
+        content.addView(
+            pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
+        )
 
         content.addView(
             label(getString(R.string.like_title), 20f, Palette.text.toArgb(), bold = true)
@@ -116,13 +125,26 @@ class MainActivity : Activity() {
             // На случай, если система отвязала сервис: просим привязать заново.
             MediaRepo.rebind(this)
             // Приложение сейчас на экране, поэтому запуск службы-«якоря» разрешён.
-            KeepAliveService.start(this)
+            KeepAliveService.ensure(this)
         }
         val pm = getSystemService(PowerManager::class.java)
         val exempt = pm?.isIgnoringBatteryOptimizations(packageName) == true
         batteryStatus.text = getString(if (exempt) R.string.battery_on else R.string.battery_off)
+        showServiceStatus()
+        // Служба поднимается не мгновенно, поэтому смотрим статус ещё раз через 3,5 секунды.
+        serviceStatus.postDelayed({ showServiceStatus() }, 3500)
         renderPlayers()
         renderActions()
+    }
+
+    private fun showServiceStatus() {
+        if (!::serviceStatus.isInitialized) return
+        val err = KeepAliveService.lastError
+        serviceStatus.text = when {
+            KeepAliveService.running -> getString(R.string.service_on)
+            err != null -> getString(R.string.service_error, err)
+            else -> getString(R.string.service_off)
+        }
     }
 
     override fun onStart() {

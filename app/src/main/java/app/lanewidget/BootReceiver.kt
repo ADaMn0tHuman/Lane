@@ -9,6 +9,6 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (!MediaRepo.hasAccess(context)) return
         MediaRepo.rebind(context)
-        KeepAliveService.start(context)
+        KeepAliveService.ensure(context)
     }
 }
