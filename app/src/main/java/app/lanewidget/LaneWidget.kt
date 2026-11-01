@@ -1,10 +1,15 @@
 package app.lanewidget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.media.session.MediaController
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
@@ -25,12 +30,14 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
+import androidx.glance.layout.RowScope
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
@@ -38,11 +45,11 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
-import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import kotlinx.coroutines.delay
 
 class LaneWidget : GlanceAppWidget() {
 
@@ -56,18 +63,55 @@ class LaneWidget : GlanceAppWidget() {
 
 class LaneWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = LaneWidget()
+
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        MediaRepo.rebind(context)
+    }
 }
 
-/** Кнопки виджета: назад / играть-пауза / вперёд. */
+/** Нажатия на кнопки: назад / играть-пауза / вперёд / «Нравится». */
 class ControlAction : ActionCallback {
+
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val c = MediaRepo.pick(MediaRepo.controllers(context)) ?: return
+        MediaRepo.rebind(context)
+        val c = MediaRepo.pick(context, MediaRepo.controllers(context)) ?: return
         val t = c.transportControls
+
         when (parameters[CMD]) {
             "prev" -> t.skipToPrevious()
             "next" -> t.skipToNext()
-            else -> if (c.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play()
+            "like" -> like(context, c)
+            else -> {
+                val willPlay = c.playbackState?.state != PlaybackState.STATE_PLAYING
+                MediaRepo.forcePlaying(willPlay)
+                if (willPlay) t.play() else t.pause()
+            }
         }
+
+        // Обновляем сразу и ещё несколько раз, пока плеер успевает ответить.
+        val widget = LaneWidget()
+        widget.updateAll(context)
+        for (wait in longArrayOf(350, 700, 1000, 800)) {
+            delay(wait)
+            widget.updateAll(context)
+        }
+    }
+
+    private fun like(ctx: Context, c: MediaController) {
+        val action = MediaRepo.findLikeAction(ctx, c)
+        when {
+            action != null -> {
+                c.transportControls.sendCustomAction(action, action.extras)
+                MediaRepo.flashLiked()
+            }
+            MediaRepo.alreadyLiked(c) -> toast(ctx, ctx.getString(R.string.already_liked))
+            else -> toast(ctx, ctx.getString(R.string.no_like_action))
+        }
+    }
+
+    private fun toast(ctx: Context, text: String) {
+        Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, text, Toast.LENGTH_LONG).show() }
     }
 
     companion object {
@@ -119,7 +163,7 @@ private fun WidgetContent(s: MediaState) {
                 backgroundColor = ColorProvider(Palette.track),
             )
             Spacer(modifier = GlanceModifier.height(8.dp))
-            Controls(s.playing)
+            Controls(s)
         }
     }
 }
@@ -149,37 +193,55 @@ private fun Cover(s: MediaState) {
     }
 }
 
+/** Четыре кнопки в равных ячейках: их центры стоят на одинаковом расстоянии и симметричны полосе. */
 @Composable
-private fun Controls(playing: Boolean) {
+private fun Controls(s: MediaState) {
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SideButton(R.drawable.ic_prev, "prev")
-        Spacer(modifier = GlanceModifier.width(10.dp))
-        Box(
-            modifier = GlanceModifier
-                .size(44.dp)
-                .background(ColorProvider(Palette.pink))
-                .cornerRadius(22.dp)
-                .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "toggle"))),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                provider = ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
-                contentDescription = null,
-                modifier = GlanceModifier.size(24.dp),
-                colorFilter = ColorFilter.tint(ColorProvider(Palette.onPink)),
-            )
+        Cell { SideButton(R.drawable.ic_prev, "prev", Palette.text) }
+        Cell { PlayButton(s.playing) }
+        Cell { SideButton(R.drawable.ic_next, "next", Palette.text) }
+        Cell {
+            if (s.flash) {
+                SideButton(R.drawable.ic_check, "like", Palette.pink)
+            } else {
+                SideButton(R.drawable.ic_plus, "like", Palette.text)
+            }
         }
-        Spacer(modifier = GlanceModifier.width(10.dp))
-        SideButton(R.drawable.ic_next, "next")
     }
 }
 
 @Composable
-private fun SideButton(res: Int, cmd: String, size: Dp = 26.dp) {
+private fun RowScope.Cell(content: @Composable () -> Unit) {
+    Box(
+        modifier = GlanceModifier.defaultWeight().height(44.dp),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+@Composable
+private fun PlayButton(playing: Boolean) {
+    Box(
+        modifier = GlanceModifier
+            .size(44.dp)
+            .background(ColorProvider(Palette.pink))
+            .cornerRadius(22.dp)
+            .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "toggle"))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
+            contentDescription = null,
+            modifier = GlanceModifier.size(24.dp),
+            colorFilter = ColorFilter.tint(ColorProvider(Palette.onPink)),
+        )
+    }
+}
+
+@Composable
+private fun SideButton(res: Int, cmd: String, tint: Color) {
     Box(
         modifier = GlanceModifier
             .size(40.dp)
@@ -189,8 +251,8 @@ private fun SideButton(res: Int, cmd: String, size: Dp = 26.dp) {
         Image(
             provider = ImageProvider(res),
             contentDescription = null,
-            modifier = GlanceModifier.size(size),
-            colorFilter = ColorFilter.tint(ColorProvider(Palette.text)),
+            modifier = GlanceModifier.size(26.dp),
+            colorFilter = ColorFilter.tint(ColorProvider(tint)),
         )
     }
 }

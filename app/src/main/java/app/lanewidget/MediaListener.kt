@@ -1,11 +1,13 @@
 package app.lanewidget
 
+import android.app.Notification
 import android.content.ComponentName
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,25 +19,35 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Нужен только ради доступа к медиасессиям: пока пользователь выдал доступ к уведомлениям,
- * система разрешает читать трек и управлять плеером. Сервис следит за сменой трека и
- * обновляет виджет, а пока музыка играет, подвигает полосу прогресса раз в 15 секунд.
+ * Следит за плеерами и обновляет виджет. Обновление приходит из трёх источников,
+ * чтобы не зависеть от капризов одного из них:
+ * 1) колбэки медиасессий (смена трека, пауза/играть),
+ * 2) медиауведомления плееров,
+ * 3) таймер раз в 10 секунд, пока играет музыка.
  */
 class MediaListener : NotificationListenerService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var tick: Job? = null
-    private var attached: List<MediaController> = emptyList()
+    private var pending: Job? = null
     private var manager: MediaSessionManager? = null
+    private val bound = mutableListOf<Pair<MediaController, Cb>>()
 
     private val component by lazy { ComponentName(this, MediaListener::class.java) }
 
     private val sessionsListener =
         MediaSessionManager.OnActiveSessionsChangedListener { list -> attach(list.orEmpty()) }
 
-    private val callback = object : MediaController.Callback() {
+    private inner class Cb(private val pkg: String) : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = refresh()
-        override fun onPlaybackStateChanged(state: PlaybackState?) = refresh()
+
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            if (state?.state == PlaybackState.STATE_PLAYING) {
+                MediaRepo.markActive(applicationContext, pkg)
+            }
+            refresh()
+        }
+
         override fun onSessionDestroyed() = refresh()
     }
 
@@ -48,7 +60,15 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         release()
-        scope.launch { LaneWidget().updateAll(applicationContext) }
+        scope.launch { runCatching { LaneWidget().updateAll(applicationContext) } }
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
+        if (isMedia(sbn)) refresh()
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        if (isMedia(sbn)) refresh()
     }
 
     override fun onDestroy() {
@@ -57,38 +77,53 @@ class MediaListener : NotificationListenerService() {
         super.onDestroy()
     }
 
+    private fun isMedia(sbn: StatusBarNotification?): Boolean =
+        sbn?.notification?.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+
     private fun release() {
         runCatching { manager?.removeOnActiveSessionsChangedListener(sessionsListener) }
-        attached.forEach { runCatching { it.unregisterCallback(callback) } }
-        attached = emptyList()
+        bound.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
+        bound.clear()
+        pending?.cancel()
         tick?.cancel()
         tick = null
     }
 
     private fun attach(list: List<MediaController>) {
-        attached.forEach { runCatching { it.unregisterCallback(callback) } }
-        attached = list
-        list.forEach { it.registerCallback(callback) }
+        bound.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
+        bound.clear()
+        list.forEach { c ->
+            val cb = Cb(c.packageName)
+            runCatching { c.registerCallback(cb) }
+            bound.add(c to cb)
+        }
+        val playing = list.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+        if (playing.size == 1) MediaRepo.markActive(applicationContext, playing.first().packageName)
         refresh()
     }
 
     private fun refresh() {
-        scope.launch {
-            LaneWidget().updateAll(applicationContext)
-            val playing = MediaRepo.pick(attached)?.playbackState?.state == PlaybackState.STATE_PLAYING
-            if (playing) startTick() else {
-                tick?.cancel()
-                tick = null
-            }
+        pending?.cancel()
+        pending = scope.launch {
+            delay(120)
+            runCatching { LaneWidget().updateAll(applicationContext) }
+            updateTick()
         }
     }
 
-    private fun startTick() {
+    private fun updateTick() {
+        val c = MediaRepo.pick(this, MediaRepo.controllers(this))
+        val playing = c?.playbackState?.state == PlaybackState.STATE_PLAYING
+        if (!playing) {
+            tick?.cancel()
+            tick = null
+            return
+        }
         if (tick?.isActive == true) return
         tick = scope.launch {
             while (isActive) {
-                delay(15_000)
-                LaneWidget().updateAll(applicationContext)
+                delay(10_000)
+                runCatching { LaneWidget().updateAll(applicationContext) }
             }
         }
     }

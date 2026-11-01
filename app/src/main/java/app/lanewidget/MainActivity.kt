@@ -13,13 +13,15 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.compose.ui.graphics.toArgb
 
-/** Один простой экран: выдать доступ к уведомлениям и подсказка, как добавить виджет. */
+/** Экран настройки: доступ к уведомлениям, выбор действия для кнопки «+», подсказка по установке. */
 class MainActivity : Activity() {
 
     private lateinit var status: TextView
+    private lateinit var actionsBox: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,18 +30,20 @@ class MainActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
 
-        val root = LinearLayout(this).apply {
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(bg)
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(28), dp(28), dp(28), dp(28))
+            setPadding(dp(28), dp(36), dp(28), dp(36))
         }
 
-        root.addView(label(getString(R.string.app_name), 30f, Palette.text.toArgb(), bold = true))
-        root.addView(label(getString(R.string.main_sub), 15f, Palette.dim.toArgb()).apply { setPadding(0, dp(8), 0, dp(32)) })
+        content.addView(label(getString(R.string.app_name), 30f, Palette.text.toArgb(), bold = true))
+        content.addView(
+            label(getString(R.string.main_sub), 15f, Palette.dim.toArgb())
+                .apply { setPadding(0, dp(8), 0, dp(28)) },
+        )
 
         status = label("", 15f, Palette.pink.toArgb(), bold = true)
-        root.addView(status)
+        content.addView(status)
 
         val button = Button(this).apply {
             text = getString(R.string.grant_button)
@@ -53,16 +57,30 @@ class MainActivity : Activity() {
             }
             setOnClickListener { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         }
-        root.addView(
+        content.addView(
             button,
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply {
                 topMargin = dp(14)
-                bottomMargin = dp(32)
+                bottomMargin = dp(28)
             },
         )
 
-        root.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
-        setContentView(root)
+        content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
+
+        content.addView(
+            label(getString(R.string.like_title), 20f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(32), 0, dp(6)) },
+        )
+        content.addView(label(getString(R.string.like_hint), 14f, Palette.dim.toArgb()))
+        actionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(actionsBox)
+
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(bg)
+            isFillViewport = true
+            addView(content)
+        }
+        setContentView(scroll)
     }
 
     override fun onResume() {
@@ -73,6 +91,60 @@ class MainActivity : Activity() {
             // На случай, если система отвязала сервис: просим привязать заново.
             NotificationListenerService.requestRebind(ComponentName(this, MediaListener::class.java))
         }
+        renderActions()
+    }
+
+    /** Показывает дополнительные действия активных плееров и даёт выбрать то, что делает «+». */
+    private fun renderActions() {
+        actionsBox.removeAllViews()
+        val list = if (MediaRepo.hasAccess(this)) MediaRepo.controllers(this) else emptyList()
+        if (list.isEmpty()) {
+            actionsBox.addView(
+                label(getString(R.string.like_none), 14f, Palette.dim.toArgb())
+                    .apply { setPadding(0, dp(12), 0, 0) },
+            )
+            return
+        }
+        for (c in list) {
+            val actions = c.playbackState?.customActions.orEmpty()
+            actionsBox.addView(
+                label(appLabel(c.packageName), 15f, Palette.text.toArgb(), bold = true)
+                    .apply { setPadding(0, dp(16), 0, dp(2)) },
+            )
+            if (actions.isEmpty()) {
+                actionsBox.addView(label(getString(R.string.like_empty), 13f, Palette.dim.toArgb()))
+                continue
+            }
+            val selected = MediaRepo.savedLike(this, c.packageName)
+                ?: MediaRepo.findLikeAction(this, c)?.action
+            for (a in actions) {
+                actionsBox.addView(chip("${a.name}", a.action == selected) {
+                    MediaRepo.saveLike(this, c.packageName, a.action)
+                    renderActions()
+                })
+            }
+        }
+    }
+
+    private fun appLabel(pkg: String): String = runCatching {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    }.getOrDefault(pkg)
+
+    private fun chip(text: String, selected: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        this.text = text
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        setTextColor((if (selected) Palette.onPink else Palette.text).toArgb())
+        typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        setPadding(dp(16), dp(12), dp(16), dp(12))
+        background = GradientDrawable().apply {
+            setColor((if (selected) Palette.pink else Palette.card).toArgb())
+            cornerRadius = dp(16).toFloat()
+        }
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(6) }
+        setOnClickListener { onClick() }
     }
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {

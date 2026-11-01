@@ -8,9 +8,17 @@
     <string name="need_access">Нужен доступ</string>
     <string name="tap_to_grant">Нажми, чтобы выдать</string>
 
+    <string name="already_liked">Трек уже в любимых</string>
+    <string name="no_like_action">Плеер не даёт кнопку «Нравится». Открой Lane Widget и выбери действие для «+»</string>
+
     <string name="main_sub">Виджет 4×2 показывает текущий трек из Lane и любого другого плеера и управляет им.</string>
     <string name="access_on">Доступ к уведомлениям: включён</string>
     <string name="access_off">Доступ к уведомлениям: выключен</string>
     <string name="grant_button">Выдать доступ</string>
     <string name="steps">1. Выдай доступ к уведомлениям для Lane Widget.\n\n2. Долгое нажатие на рабочем столе → Виджеты → Lane Widget.\n\n3. Растяни до 4×2 и положи над доком.</string>
+
+    <string name="like_title">Кнопка «+»</string>
+    <string name="like_hint">Кнопка нажимает дополнительное действие плеера, например «Нравится». Обычно оно находится само. Если нет, включи трек, открой этот экран и выбери нужное действие в списке.</string>
+    <string name="like_none">Включи трек, и здесь появятся действия плеера.</string>
+    <string name="like_empty">Этот плеер не показывает дополнительных действий. «+» с ним работать не сможет.</string>
 </resources>
