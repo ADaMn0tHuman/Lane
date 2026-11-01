@@ -131,14 +131,14 @@ class ControlAction : ActionCallback {
         // Многие плееры после перехода на другой трек сами начинают играть. Следим и ставим на паузу.
         if (keepPaused) holdPause(c)
 
-        // Ещё одно обновление через секунду страхует случай, когда плеер не прислал колбэк.
-        delay(1000)
-        WidgetUpdater.refresh(context)
+        // Повторная проверка: для режимов (перемешать, повтор) через 0,5 с, для остального через 1 с.
+        // Страхует случай, когда плеер не прислал колбэк.
         if (parameters[CMD] == "shuffle" || parameters[CMD] == "repeat") {
-            // Плееры часто подтверждают режим с задержкой, проверяем ещё раз позже.
-            delay(1500)
-            WidgetUpdater.refresh(context)
+            delay(500)
+        } else {
+            delay(1000)
         }
+        WidgetUpdater.refresh(context)
     }
 
     /**
