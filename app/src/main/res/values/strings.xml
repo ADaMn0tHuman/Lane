@@ -62,4 +62,18 @@
     <string name="update_found">Найдено обновление, скачиваю…</string>
     <string name="update_need_permission">Разреши установку для Lane Widget и нажми кнопку ещё раз</string>
     <string name="update_error">Не удалось проверить обновление: %1$s</string>
+
+    <string name="theme_title">Цветовые паки</string>
+    <string name="theme_hint">Нажми на пак, чтобы применить его к виджету. Свои паки можно создать ниже.</string>
+    <string name="theme_delete">Удалить этот пак</string>
+    <string name="theme_new">Создать свой пак</string>
+    <string name="theme_name_hint">Название пака</string>
+    <string name="theme_bg">Фон карточки (#RRGGBB)</string>
+    <string name="theme_accent">Акцент: кнопки, полоска, имя исполнителя (#RRGGBB)</string>
+    <string name="theme_text">Текст (#RRGGBB)</string>
+    <string name="theme_save">Сохранить и применить</string>
+    <string name="theme_bad_name">Введи название пака</string>
+    <string name="theme_bad_hex">Цвет должен быть в формате #RRGGBB, например #1E1E2E</string>
+    <string name="theme_builtin">Это название занято встроенным паком</string>
+    <string name="update_sig_mismatch">Обновление подписано другим ключом, установка отменена</string>
 </resources>

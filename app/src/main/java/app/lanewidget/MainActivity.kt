@@ -17,6 +17,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -33,9 +34,11 @@ class MainActivity : Activity() {
     private lateinit var playersBox: LinearLayout
     private lateinit var batteryStatus: TextView
     private lateinit var serviceStatus: TextView
+    private lateinit var palettesBox: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeStore.apply(this)
 
         val bg = Palette.screenBg.toArgb()
         window.statusBarColor = bg
@@ -65,6 +68,15 @@ class MainActivity : Activity() {
         )
 
         content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
+
+        // Цветовые паки
+        content.addView(
+            label(getString(R.string.theme_title), 20f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(32), 0, dp(6)) },
+        )
+        content.addView(label(getString(R.string.theme_hint), 14f, Palette.dim.toArgb()))
+        palettesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(palettesBox)
 
         // Чтобы виджет не засыпал
         content.addView(
@@ -139,6 +151,7 @@ class MainActivity : Activity() {
         serviceStatus.postDelayed({ showServiceStatus() }, 3500)
         renderPlayers()
         renderActions()
+        renderPalettes()
     }
 
     private fun showServiceStatus() {
@@ -191,6 +204,87 @@ class MainActivity : Activity() {
             )
         }
     }
+
+    /** Список паков, кнопка удаления своего пака и форма создания нового. */
+    private fun renderPalettes() {
+        palettesBox.removeAllViews()
+        val active = ThemeStore.active(this)
+        for (p in ThemeStore.all(this)) {
+            val isOn = p.name == active.name
+            palettesBox.addView(
+                chip(if (isOn) "${p.name} ✓" else p.name, isOn) {
+                    ThemeStore.setActive(this, p.name)
+                    recreate()
+                },
+            )
+        }
+        if (!ThemeStore.isBuiltIn(active.name)) {
+            palettesBox.addView(
+                pillButton(getString(R.string.theme_delete)) {
+                    ThemeStore.delete(this, active.name)
+                    recreate()
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) },
+            )
+        }
+
+        palettesBox.addView(
+            label(getString(R.string.theme_new), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        fun field(hint: String, value: String) = EditText(this).apply {
+            setText(value)
+            this.hint = hint
+            setTextColor(Palette.text.toArgb())
+            setHintTextColor(Palette.dim.toArgb())
+            setBackgroundColor(Palette.track.toArgb())
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setSingleLine()
+        }
+        val nameField = field(getString(R.string.theme_name_hint), "")
+        val bgField = field("#RRGGBB", active.bg)
+        val accentField = field("#RRGGBB", active.accent)
+        val textField = field("#RRGGBB", active.text)
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = dp(8) }
+        palettesBox.addView(nameField, lp)
+        palettesBox.addView(label(getString(R.string.theme_bg), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) })
+        palettesBox.addView(bgField, lp)
+        palettesBox.addView(label(getString(R.string.theme_accent), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) })
+        palettesBox.addView(accentField, lp)
+        palettesBox.addView(label(getString(R.string.theme_text), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) })
+        palettesBox.addView(textField, lp)
+
+        palettesBox.addView(
+            pillButton(getString(R.string.theme_save)) {
+                val name = nameField.text.toString().trim()
+                val bg = ThemeStore.normalize(bgField.text.toString())
+                val accent = ThemeStore.normalize(accentField.text.toString())
+                val text = ThemeStore.normalize(textField.text.toString())
+                when {
+                    name.isEmpty() -> toastMsg(R.string.theme_bad_name)
+                    bg == null || accent == null || text == null -> toastMsg(R.string.theme_bad_hex)
+                    else -> {
+                        val err = ThemeStore.save(this, Pack(name, bg, accent, text))
+                        when (err) {
+                            "builtin" -> toastMsg(R.string.theme_builtin)
+                            "name" -> toastMsg(R.string.theme_bad_name)
+                            else -> {
+                                ThemeStore.setActive(this, name)
+                                CoroutineScope(Dispatchers.Main).launch {
+                                    WidgetUpdater.refresh(applicationContext)
+                                }
+                                recreate()
+                            }
+                        }
+                    }
+                }
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) },
+        )
+    }
+
+    private fun toastMsg(res: Int) = android.widget.Toast.makeText(this, res, android.widget.Toast.LENGTH_LONG).show()
 
     /** Все активные плееры, включая скрытые, с переключателем «показывать / скрыть». */
     private fun renderPlayers() {

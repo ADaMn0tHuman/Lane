@@ -35,6 +35,7 @@ class DiagnosticsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeStore.apply(this)
         val bg = Palette.screenBg.toArgb()
         window.statusBarColor = bg
         window.navigationBarColor = bg

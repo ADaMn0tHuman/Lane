@@ -228,6 +228,7 @@ object MediaRepo {
     // ---- Чтение состояния для виджета ----
 
     suspend fun read(ctx: Context): MediaState {
+        ThemeStore.apply(ctx)
         if (!hasAccess(ctx)) {
             return MediaState(
                 ctx.getString(R.string.need_access),

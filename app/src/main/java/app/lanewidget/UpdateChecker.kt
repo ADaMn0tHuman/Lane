@@ -2,6 +2,9 @@ package app.lanewidget
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -14,6 +17,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 
 /**
  * Самообновление: берёт последний релиз на GitHub, сравнивает номер сборки с установленным
@@ -75,11 +79,36 @@ object UpdateChecker {
                 }.inputStream.use { input ->
                     file.outputStream().use { input.copyTo(it) }
                 }
+                if (!signaturesMatch(app, file)) {
+                    file.delete()
+                    toast(app, app.getString(R.string.update_sig_mismatch))
+                    return@Thread
+                }
                 main.post { install(app, file) }
             } catch (e: Exception) {
                 toast(app, app.getString(R.string.update_error, e.message ?: e.javaClass.simpleName))
             }
         }.start()
+    }
+
+    /** Подпись скачанного APK должна совпадать с подписью установленной версии, иначе установка не пройдёт. */
+    @Suppress("DEPRECATION")
+    private fun signaturesMatch(ctx: Context, file: File): Boolean {
+        val pm = ctx.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val installed = digests(pm.getPackageInfo(ctx.packageName, flags))
+        val archive = pm.getPackageArchiveInfo(file.absolutePath, flags) ?: return false
+        val other = digests(archive)
+        return installed.isNotEmpty() && installed == other
+    }
+
+    @Suppress("DEPRECATION")
+    private fun digests(info: PackageInfo): Set<String> {
+        val sigs: Array<Signature>? =
+            if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
+        return sigs.orEmpty().map { sig ->
+            MessageDigest.getInstance("SHA-256").digest(sig.toByteArray()).joinToString("") { "%02x".format(it) }
+        }.toSet()
     }
 
     private fun install(ctx: Context, file: File) {
