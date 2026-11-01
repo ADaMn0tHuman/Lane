@@ -7,7 +7,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
-import androidx.glance.LocalSize
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.clickable
@@ -37,7 +36,7 @@ import androidx.glance.unit.ColorProvider
 /** Компактный виджет 4×1: обложка с значком плеера, название, исполнитель, полоска и play. */
 class LaneCompactWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Exact
+    override val sizeMode: SizeMode = SizeMode.Single
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = MediaRepo.read(context)
@@ -64,9 +63,7 @@ private fun CompactContent(s: MediaState) {
         .cornerRadius(26.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
-    // Элементы ужимаются под фактическую высоту, иначе круг кнопки обрезается и становится овалом.
-    val h = LocalSize.current.height
-    val unit = if (h - 16.dp < 48.dp) h - 16.dp else 48.dp
+    val unit = 48.dp
 
     Box(modifier = root) {
         val blur = s.blurBg
@@ -109,7 +106,7 @@ private fun CompactContent(s: MediaState) {
                     modifier = GlanceModifier.fillMaxWidth().height(6.dp),
                 )
             }
-            PlayButton(s.playing, unit.coerceAtMost(40.dp))
+            PlayButton(s.playing, 40.dp)
         }
     }
 }

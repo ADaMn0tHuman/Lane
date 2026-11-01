@@ -221,6 +221,15 @@ private fun WidgetContent(s: MediaState) {
                 contentScale = ContentScale.Crop,
             )
         }
+        // Наклейка: над фоном, под текстом и кнопками. Нажатия проходят сквозь неё.
+        s.sticker?.let { sticker ->
+            Image(
+                provider = ImageProvider(sticker),
+                contentDescription = null,
+                modifier = GlanceModifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds,
+            )
+        }
         Row(
             modifier = GlanceModifier
                 .fillMaxSize()

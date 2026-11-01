@@ -22,10 +22,13 @@ import android.widget.Button
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.ColorUtils
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.compose.ui.graphics.toArgb
@@ -249,6 +252,107 @@ class MainActivity : Activity() {
             )
         }
 
+        // Наклейка на большой виджет
+        palettesBox.addView(
+            label(getString(R.string.sticker_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        val stickerOn = Sticker.isOn(this)
+        palettesBox.addView(
+            chip(if (stickerOn) getString(R.string.sticker_on) else getString(R.string.sticker_off), stickerOn) {
+                if (!Sticker.hasFile(this)) {
+                    toastMsg(R.string.sticker_none)
+                } else {
+                    Sticker.setOn(this, !stickerOn)
+                    refreshWidgets()
+                    renderPalettes()
+                }
+            },
+        )
+        palettesBox.addView(
+            pillButton(getString(R.string.sticker_pick)) { pickSticker() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        if (Sticker.hasFile(this)) {
+            palettesBox.addView(
+                pillButton(getString(R.string.sticker_remove)) {
+                    Sticker.remove(this)
+                    refreshWidgets()
+                    renderPalettes()
+                },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+            )
+            val stickerPreview = ImageView(this).apply {
+                background = shape(Palette.card.toArgb(), dp(16))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(Sticker.layer(this@MainActivity, true))
+                // Палец двигает наклейку. Внутри прокрутки не отдаём касание родителю.
+                setOnTouchListener { v, e ->
+                    when (e.actionMasked) {
+                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                            v.parent?.requestDisallowInterceptTouchEvent(true)
+                            val (nx, ny) = touchToLayer(v, e.x, e.y)
+                            Sticker.setPosition(this@MainActivity, nx, ny)
+                            (v as ImageView).setImageBitmap(Sticker.layer(this@MainActivity, true))
+                            true
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            refreshWidgets()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
+            palettesBox.addView(
+                label(getString(R.string.sticker_drag_hint), 13f, Palette.dim.toArgb()),
+            )
+            palettesBox.addView(
+                stickerPreview,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(110)).apply { topMargin = dp(6) },
+            )
+
+            val sizeLabel = label(getString(R.string.sticker_size, Sticker.scale(this)), 13f, Palette.dim.toArgb())
+            palettesBox.addView(sizeLabel.apply { setPadding(0, dp(10), 0, 0) })
+            palettesBox.addView(
+                SeekBar(this).apply {
+                    max = 90
+                    progress = Sticker.scale(this@MainActivity) - 10
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                            sizeLabel.text = getString(R.string.sticker_size, p + 10)
+                        }
+                        override fun onStartTrackingTouch(sb: SeekBar) {}
+                        override fun onStopTrackingTouch(sb: SeekBar) {
+                            Sticker.setScale(this@MainActivity, sb.progress + 10)
+                            stickerPreview.setImageBitmap(Sticker.layer(this@MainActivity, true))
+                            refreshWidgets()
+                        }
+                    })
+                },
+            )
+
+            val rotLabel = label(getString(R.string.sticker_rot, Sticker.rotation(this)), 13f, Palette.dim.toArgb())
+            palettesBox.addView(rotLabel.apply { setPadding(0, dp(10), 0, 0) })
+            palettesBox.addView(
+                SeekBar(this).apply {
+                    max = 360
+                    progress = Sticker.rotation(this@MainActivity) + 180
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                            rotLabel.text = getString(R.string.sticker_rot, p - 180)
+                        }
+                        override fun onStartTrackingTouch(sb: SeekBar) {}
+                        override fun onStopTrackingTouch(sb: SeekBar) {
+                            Sticker.setRotation(this@MainActivity, sb.progress - 180)
+                            stickerPreview.setImageBitmap(Sticker.layer(this@MainActivity, true))
+                            refreshWidgets()
+                        }
+                    })
+                },
+            )
+        }
+
         palettesBox.addView(
             label(getString(R.string.preview_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(6)) },
@@ -405,6 +509,36 @@ class MainActivity : Activity() {
                 val target = body
                 if (target != null) target.addView(v) else root.addView(v)
             }
+        }
+    }
+
+    /** Касание в предпросмотре переводим в доли слоя 720×272, учитывая, что картинка вписана по центру. */
+    private fun touchToLayer(v: View, x: Float, y: Float): Pair<Float, Float> {
+        val scale = minOf(v.width / 720f, v.height / 272f)
+        val drawnW = 720f * scale
+        val drawnH = 272f * scale
+        val left = (v.width - drawnW) / 2f
+        val top = (v.height - drawnH) / 2f
+        return ((x - left) / drawnW).coerceIn(0f, 1f) to ((y - top) / drawnH).coerceIn(0f, 1f)
+    }
+
+    private fun pickSticker() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"),
+            reqSticker,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != reqSticker || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        if (Sticker.importFrom(this, uri)) {
+            refreshWidgets()
+            renderPalettes()
+        } else {
+            toastMsg(R.string.sticker_bad)
         }
     }
 
@@ -585,6 +719,7 @@ class MainActivity : Activity() {
     }
 
     private val headerTag = "header"
+    private val reqSticker = 4711
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
         this.text = text
