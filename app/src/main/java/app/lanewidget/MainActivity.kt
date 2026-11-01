@@ -97,6 +97,10 @@ class MainActivity : Activity() {
         content.addView(playersBox)
 
         content.addView(
+            pillButton(getString(R.string.update_button)) { UpdateChecker.check(this) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
+        )
+        content.addView(
             pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
         )

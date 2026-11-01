@@ -8,14 +8,18 @@ android {
     namespace = "app.lanewidget"
     compileSdk = 34
 
-    // Постоянный ключ подписи. Без него каждая сборка на GitHub Actions подписывается новым
-    // случайным ключом, и Android не даёт поставить новую версию поверх старой.
+    // Подпись. На GitHub Actions ключ берётся из секретов (переменные LANE_*).
+    // Локально, без переменных, используется стандартный отладочный ключ.
+    // Один и тот же ключ означает, что обновления ставятся поверх без удаления.
     signingConfigs {
         getByName("debug") {
-            storeFile = file("lane.keystore")
-            storePassword = "lanewidget"
-            keyAlias = "lane"
-            keyPassword = "lanewidget"
+            val ks = System.getenv("LANE_KEYSTORE")
+            if (ks != null && file(ks).exists()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("LANE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("LANE_KEY_ALIAS")
+                keyPassword = System.getenv("LANE_KEY_PASSWORD")
+            }
         }
     }
 

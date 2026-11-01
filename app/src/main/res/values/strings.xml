@@ -54,4 +54,12 @@
     <string name="diag_refresh">Обновить</string>
     <string name="diag_copy">Скопировать</string>
     <string name="diag_copied">Скопировано</string>
+
+    <string name="update_button">Проверить обновление</string>
+    <string name="update_checking">Проверяю обновления…</string>
+    <string name="update_none">Установлена последняя версия</string>
+    <string name="update_no_apk">В последнем релизе нет APK</string>
+    <string name="update_found">Найдено обновление, скачиваю…</string>
+    <string name="update_need_permission">Разреши установку для Lane Widget и нажми кнопку ещё раз</string>
+    <string name="update_error">Не удалось проверить обновление: %1$s</string>
 </resources>
