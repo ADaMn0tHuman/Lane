@@ -22,7 +22,6 @@ import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.LinearProgressIndicator
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
@@ -43,8 +42,10 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
+import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import kotlinx.coroutines.delay
@@ -156,14 +157,9 @@ private fun WidgetContent(s: MediaState) {
                 maxLines = 1,
                 style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
             )
-            Spacer(modifier = GlanceModifier.height(10.dp))
-            LinearProgressIndicator(
-                progress = s.progress,
-                modifier = GlanceModifier.fillMaxWidth().height(4.dp),
-                color = ColorProvider(Palette.pink),
-                backgroundColor = ColorProvider(Palette.track),
-            )
-            Spacer(modifier = GlanceModifier.height(8.dp))
+            Spacer(modifier = GlanceModifier.height(6.dp))
+            ProgressRow(s)
+            Spacer(modifier = GlanceModifier.height(4.dp))
             Controls(s)
         }
     }
@@ -191,6 +187,37 @@ private fun Cover(s: MediaState) {
                 colorFilter = ColorFilter.tint(ColorProvider(Palette.pink)),
             )
         }
+    }
+}
+
+/** Время «прошло», полоска прогресса и общая длительность трека. */
+@Composable
+private fun ProgressRow(s: MediaState) {
+    val timeWidth = if (s.durationMs >= 3_600_000L) 46.dp else 34.dp
+    val elapsed = MediaRepo.formatTime(s.positionMs)
+    val total = if (s.durationMs > 0) MediaRepo.formatTime(s.durationMs) else "--:--"
+    Row(
+        modifier = GlanceModifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = elapsed,
+            maxLines = 1,
+            modifier = GlanceModifier.width(timeWidth),
+            style = TextStyle(color = ColorProvider(Palette.dim), fontSize = 11.sp, textAlign = TextAlign.Start),
+        )
+        Image(
+            provider = ImageProvider(ProgressBitmap.draw(s.progress)),
+            contentDescription = null,
+            contentScale = ContentScale.FillBounds,
+            modifier = GlanceModifier.defaultWeight().height(4.dp),
+        )
+        Text(
+            text = total,
+            maxLines = 1,
+            modifier = GlanceModifier.width(timeWidth),
+            style = TextStyle(color = ColorProvider(Palette.dim), fontSize = 11.sp, textAlign = TextAlign.End),
+        )
     }
 }
 

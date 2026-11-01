@@ -2,6 +2,7 @@ package app.lanewidget
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadata
@@ -25,6 +26,8 @@ data class MediaState(
     val packageName: String?,
     val hasAccess: Boolean,
     val flash: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
 )
 
 object MediaRepo {
@@ -45,6 +48,20 @@ object MediaRepo {
     // Кэш обложки, загруженной по ссылке.
     private var coverKey: String? = null
     private var coverBitmap: Bitmap? = null
+
+    // Кэш уменьшенной обложки, пришедшей картинкой. Без него при обновлении раз в секунду
+    // мы бы каждый раз заново создавали уменьшенную копию.
+    private var rawCover: Bitmap? = null
+    private var rawCoverScaled: Bitmap? = null
+
+    fun formatTime(ms: Long): String {
+        val total = (ms / 1000).coerceAtLeast(0)
+        val h = total / 3600
+        val m = (total % 3600) / 60
+        val sec = total % 60
+        return if (h > 0) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, sec)
+        else String.format(java.util.Locale.ROOT, "%d:%02d", m, sec)
+    }
 
     fun forcePlaying(value: Boolean) {
         forcedPlaying = value
@@ -90,18 +107,27 @@ object MediaRepo {
     /** Просит систему заново привязать сервис, если его усыпили. */
     fun rebind(ctx: Context) {
         if (!hasAccess(ctx)) return
-        runCatching {
-            NotificationListenerService.requestRebind(ComponentName(ctx, MediaListener::class.java))
+        val cn = ComponentName(ctx, MediaListener::class.java)
+        runCatching { NotificationListenerService.requestRebind(cn) }
+        if (!MediaListener.connected) {
+            // Известный приём: выключить и включить компонент, тогда система привяжет сервис заново.
+            runCatching {
+                val pm = ctx.packageManager
+                pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                pm.setComponentEnabledSetting(cn, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            }
         }
     }
 
-    fun controllers(ctx: Context): List<MediaController> {
+    /** Активные плееры. Видеосервисы и браузеры (см. Blocklist) отбрасываются, если не просили иначе. */
+    fun controllers(ctx: Context, includeBlocked: Boolean = false): List<MediaController> {
         val msm = ctx.getSystemService(MediaSessionManager::class.java) ?: return emptyList()
-        return try {
+        val all = try {
             msm.getActiveSessions(ComponentName(ctx, MediaListener::class.java))
         } catch (e: SecurityException) {
             emptyList()
         }
+        return if (includeBlocked) all else all.filter { !Blocklist.isBlocked(ctx, it.packageName) }
     }
 
     /**
@@ -185,11 +211,12 @@ object MediaRepo {
             }
         }
 
-        val duration = meta.getLong(MediaMetadata.METADATA_KEY_DURATION)
-        var position = state?.position ?: 0L
+        val duration = meta.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0L)
+        var position = (state?.position ?: 0L).coerceAtLeast(0L)
         if (realPlaying && state != null && state.lastPositionUpdateTime > 0) {
             position += ((now - state.lastPositionUpdateTime) * state.playbackSpeed).toLong()
         }
+        if (duration > 0) position = position.coerceAtMost(duration)
         val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
         return MediaState(
@@ -201,6 +228,8 @@ object MediaRepo {
             packageName = c.packageName,
             hasAccess = true,
             flash = now < likedUntil,
+            positionMs = position,
+            durationMs = duration,
         )
     }
 
@@ -208,7 +237,13 @@ object MediaRepo {
         val bmp = meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-        if (bmp != null) return scale(bmp)
+        if (bmp != null) {
+            if (bmp === rawCover) return rawCoverScaled
+            val scaled = scale(bmp)
+            rawCover = bmp
+            rawCoverScaled = scaled
+            return scaled
+        }
 
         val uri = meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: meta.getString(MediaMetadata.METADATA_KEY_ART_URI)
@@ -243,12 +278,12 @@ object MediaRepo {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         var sample = 1
-        while (bounds.outWidth / (sample * 2) >= 400 && bounds.outHeight / (sample * 2) >= 400) sample *= 2
+        while (bounds.outWidth / (sample * 2) >= 320 && bounds.outHeight / (sample * 2) >= 320) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.let { scale(it) }
     }
 
-    private fun scale(b: Bitmap, max: Int = 400): Bitmap {
+    private fun scale(b: Bitmap, max: Int = 320): Bitmap {
         val m = maxOf(b.width, b.height)
         if (m <= max) return b
         val k = max.toFloat() / m

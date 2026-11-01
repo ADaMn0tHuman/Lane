@@ -21,4 +21,21 @@
     <string name="like_hint">Кнопка нажимает дополнительное действие плеера, например «Нравится». Обычно оно находится само. Если нет, включи трек, открой этот экран и выбери нужное действие в списке.</string>
     <string name="like_none">Включи трек, и здесь появятся действия плеера.</string>
     <string name="like_empty">Этот плеер не показывает дополнительных действий. «+» с ним работать не сможет.</string>
+
+    <string name="keepalive_channel">Работа в фоне</string>
+    <string name="keepalive_title">Lane Widget работает</string>
+    <string name="keepalive_text">Держит виджет подключённым к плееру</string>
+
+    <string name="bg_title">Чтобы виджет не засыпал</string>
+    <string name="bg_hint">Некоторые прошивки (Xiaomi, Huawei, Oppo, Vivo) убивают фоновые приложения. Включи оба пункта ниже.</string>
+    <string name="battery_on">Экономия батареи для Lane Widget: отключена</string>
+    <string name="battery_off">Экономия батареи для Lane Widget: включена, система может усыплять виджет</string>
+    <string name="battery_button">Не ограничивать батарею</string>
+    <string name="autostart_button">Автозапуск и фоновая работа</string>
+
+    <string name="players_title">Какие плееры показывать</string>
+    <string name="players_hint">Видеосервисы и браузеры скрыты сами. Нажми на плеер, чтобы скрыть его или вернуть. Список появляется, когда плеер что-то играет или стоит на паузе.</string>
+    <string name="players_none">Сейчас нет активных плееров.</string>
+    <string name="player_shown">показывается</string>
+    <string name="player_hidden">скрыт</string>
 </resources>
