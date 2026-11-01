@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalSize
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.clickable
@@ -63,6 +64,10 @@ private fun CompactContent(s: MediaState) {
         .cornerRadius(26.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
+    // Элементы ужимаются под фактическую высоту, иначе круг кнопки обрезается и становится овалом.
+    val h = LocalSize.current.height
+    val unit = if (h - 16.dp < 48.dp) h - 16.dp else 48.dp
+
     Box(modifier = root) {
         val blur = s.blurBg
         if (blur != null) {
@@ -77,8 +82,8 @@ private fun CompactContent(s: MediaState) {
             modifier = GlanceModifier.fillMaxSize().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = GlanceModifier.size(48.dp), contentAlignment = Alignment.BottomStart) {
-                Cover(s, 48.dp, 14.dp)
+            Box(modifier = GlanceModifier.size(unit), contentAlignment = Alignment.BottomStart) {
+                Cover(s, unit, 14.dp)
                 AppBadge(s, 18.dp)
             }
             Column(
@@ -107,7 +112,7 @@ private fun CompactContent(s: MediaState) {
                     modifier = GlanceModifier.fillMaxWidth().height(6.dp),
                 )
             }
-            PlayButton(s.playing, 40.dp)
+            PlayButton(s.playing, unit.coerceAtMost(40.dp))
         }
     }
 }

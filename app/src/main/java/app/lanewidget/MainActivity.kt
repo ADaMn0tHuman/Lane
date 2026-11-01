@@ -76,14 +76,15 @@ class MainActivity : Activity() {
 
         content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
 
-        // Цветовые паки
         content.addView(
-            label(getString(R.string.theme_title), 20f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(32), 0, dp(6)) },
+            pillButton(getString(R.string.update_button)) { UpdateChecker.check(this) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
         )
-        content.addView(label(getString(R.string.theme_hint), 14f, Palette.dim.toArgb()))
-        palettesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(palettesBox)
+        content.addView(
+            pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
+        )
+
 
         // Чтобы виджет не засыпал
         content.addView(
@@ -106,6 +107,15 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) },
         )
 
+        // Цветовые паки
+        content.addView(
+            label(getString(R.string.theme_title), 20f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(32), 0, dp(6)) },
+        )
+        content.addView(label(getString(R.string.theme_hint), 14f, Palette.dim.toArgb()))
+        palettesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(palettesBox)
+
         // Какие плееры показывать
         content.addView(
             label(getString(R.string.players_title), 20f, Palette.text.toArgb(), bold = true)
@@ -115,16 +125,7 @@ class MainActivity : Activity() {
         playersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(playersBox)
 
-        content.addView(
-            pillButton(getString(R.string.update_button)) { UpdateChecker.check(this) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
-        )
-        content.addView(
-            pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
-        )
-
-
+        makeCollapsible(content)
         val scroll = ScrollView(this).apply {
             setBackgroundColor(bg)
             isFillViewport = true
@@ -372,6 +373,41 @@ class MainActivity : Activity() {
         )
     }
 
+    /**
+     * Большие разделы (заголовки 20 sp) можно свернуть: нажатие на заголовок прячет содержимое.
+     * Состояние каждого раздела запоминается.
+     */
+    private fun makeCollapsible(root: LinearLayout) {
+        val prefs = getSharedPreferences("lane_widget", MODE_PRIVATE)
+        val views = (0 until root.childCount).map { root.getChildAt(it) }
+        root.removeAllViews()
+        var body: LinearLayout? = null
+        for (v in views) {
+            if (v is TextView && v.tag == headerTag) {
+                val title = v.text.toString()
+                val key = "fold_$title"
+                val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                var collapsed = prefs.getBoolean(key, false)
+                fun paint() {
+                    v.text = (if (collapsed) "▸ " else "▾ ") + title
+                    container.visibility = if (collapsed) View.GONE else View.VISIBLE
+                }
+                paint()
+                v.setOnClickListener {
+                    collapsed = !collapsed
+                    prefs.edit().putBoolean(key, collapsed).apply()
+                    paint()
+                }
+                root.addView(v)
+                root.addView(container)
+                body = container
+            } else {
+                val target = body
+                if (target != null) target.addView(v) else root.addView(v)
+            }
+        }
+    }
+
     private fun refreshWidgets() {
         CoroutineScope(Dispatchers.Main).launch { WidgetUpdater.refresh(applicationContext) }
     }
@@ -423,23 +459,15 @@ class MainActivity : Activity() {
             textSize = 13f
         })
 
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = shape(track, dp(2))
-        }
-        // Точка над полоской на месте текущей позиции (40 %).
-        val dotRow = LinearLayout(this).apply {
+        // Одна линия: заливка, точка на границе позиции, остаток трека.
+        val barRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        dotRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 0.4f))
-        dotRow.addView(View(this).apply { background = shape(dot, dp(4)) }, LinearLayout.LayoutParams(dp(8), dp(8)))
-        dotRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 0.6f))
-        right.addView(dotRow, LinearLayout.LayoutParams(match, dp(8)).apply { topMargin = dp(8) })
-
-        bar.addView(View(this).apply { background = shape(accent, dp(2)) }, LinearLayout.LayoutParams(0, match, 0.4f))
-        bar.addView(View(this), LinearLayout.LayoutParams(0, match, 0.6f))
-        right.addView(bar, LinearLayout.LayoutParams(match, dp(4)))
+        barRow.addView(View(this).apply { background = shape(accent, dp(2)) }, LinearLayout.LayoutParams(0, dp(4), 0.4f))
+        barRow.addView(View(this).apply { background = shape(dot, dp(4)) }, LinearLayout.LayoutParams(dp(8), dp(8)))
+        barRow.addView(View(this).apply { background = shape(track, dp(2)) }, LinearLayout.LayoutParams(0, dp(4), 0.6f))
+        right.addView(barRow, LinearLayout.LayoutParams(match, dp(8)).apply { topMargin = dp(10) })
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -556,8 +584,11 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
+    private val headerTag = "header"
+
     private fun label(text: String, sp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
         this.text = text
+        if (sp == 20f) tag = headerTag
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
         setTextColor(color)
         if (bold) typeface = Typeface.DEFAULT_BOLD

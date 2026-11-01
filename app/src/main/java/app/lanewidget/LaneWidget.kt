@@ -224,14 +224,15 @@ private fun WidgetContent(s: MediaState) {
         Row(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Обложка 92 dp (была 84, +10 %). Текст начинается на том же расстоянии от края: 12 + 92 + 6 = 110 dp.
-            // Значок плеера лежит поверх левого нижнего угла обложки, чтобы виджет не стал выше.
-            Box(modifier = GlanceModifier.size(92.dp), contentAlignment = Alignment.BottomStart) {
+            // Значок плеера под обложкой слева. 92 + 4 + 32 = 128 dp, что помещается в виджет 136 dp.
+            Column(horizontalAlignment = Alignment.Start) {
                 Cover(s, 92.dp, 20.dp)
-                AppBadge(s, 40.dp)
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                AppBadge(s, 32.dp)
             }
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 6.dp),
