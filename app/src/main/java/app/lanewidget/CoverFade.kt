@@ -10,6 +10,10 @@ import android.os.SystemClock
  * Плавная смена обложки. Виджет не умеет анимировать картинку сам, поэтому при смене трека
  * мы за 350 мс показываем несколько промежуточных кадров, где старая обложка постепенно
  * проявляется в новую. Кадры запрашивает WidgetUpdater, пока `running` равен true.
+ *
+ * Важно: обложки сравниваются по ключу (отпечатку картинки), а не по ссылке на объект.
+ * Система отдаёт новый объект Bitmap при каждом чтении, и сравнение по ссылке заново
+ * запускало бы смену на каждом обновлении, из-за чего картинка зависала на старой.
  */
 object CoverFade {
 
@@ -18,23 +22,26 @@ object CoverFade {
     private var shown: Bitmap? = null
     private var from: Bitmap? = null
     private var to: Bitmap? = null
+    private var toKey: String? = null
     private var startAt = 0L
 
     @Volatile var running = false
         private set
 
-    fun frame(target: Bitmap?): Bitmap? {
-        if (target == null) {
+    fun frame(key: String?, target: Bitmap?): Bitmap? {
+        if (target == null || key == null) {
             shown = null
             from = null
             to = null
+            toKey = null
             running = false
-            return null
+            return target
         }
         val now = SystemClock.elapsedRealtime()
-        if (target !== to) {
+        if (key != toKey) {
             val prev = shown
             to = target
+            toKey = key
             if (prev == null) {
                 from = null
                 shown = target

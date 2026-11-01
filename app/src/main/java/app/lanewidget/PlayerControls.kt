@@ -36,16 +36,17 @@ object PlayerControls {
     private val OFF_PHRASES = listOf("turn off", "disable", "выключ", "отключ", "unshuffle")
     private val DOWNLOADED_WORDS = listOf("downloaded", "скачан", "загружен")
 
-    private var compatToken: Any? = null
-    private var compatCtl: MediaControllerCompat? = null
+    // Один MediaControllerCompat на сессию. Его же используем и для чтения состояния,
+    // и для колбэков, поэтому храним по токену сессии.
+    private val compatCache = HashMap<Any, MediaControllerCompat>()
 
-    private fun compat(ctx: Context, c: MediaController): MediaControllerCompat? = try {
+    internal fun compat(ctx: Context, c: MediaController): MediaControllerCompat? = try {
         val t = c.sessionToken
-        if (t != compatToken || compatCtl == null) {
-            compatCtl = MediaControllerCompat(ctx.applicationContext, MediaSessionCompat.Token.fromToken(t))
-            compatToken = t
+        compatCache[t] ?: run {
+            if (compatCache.size > 8) compatCache.clear()
+            MediaControllerCompat(ctx.applicationContext, MediaSessionCompat.Token.fromToken(t))
+                .also { compatCache[t] = it }
         }
-        compatCtl
     } catch (e: Exception) {
         null
     }
@@ -140,35 +141,46 @@ object PlayerControls {
 
     fun toggleShuffle(ctx: Context, c: MediaController): String? {
         val cc = compat(ctx, c)
-        val mode = shuffleMode(cc)
-        if (mode != -1 && cc != null) {
+        val i = info(ctx, c)
+        if (!i.shuffleSupported) return ctx.getString(R.string.no_shuffle)
+        // Целевое состояние считаем сами (с учётом ещё не подтверждённого нажатия),
+        // чтобы быстрые нажатия не путались, пока плеер отвечает с задержкой.
+        val target = !MediaRepo.effectiveShuffle(i.shuffleOn)
+        if (shuffleMode(cc) != -1 && cc != null) {
             cc.transportControls.setShuffleMode(
-                if (mode == PlaybackStateCompat.SHUFFLE_MODE_NONE) PlaybackStateCompat.SHUFFLE_MODE_ALL
-                else PlaybackStateCompat.SHUFFLE_MODE_NONE,
+                if (target) PlaybackStateCompat.SHUFFLE_MODE_ALL else PlaybackStateCompat.SHUFFLE_MODE_NONE,
             )
-            return null
+        } else {
+            val act = actionWith(c, SHUFFLE_WORDS) ?: return ctx.getString(R.string.no_shuffle)
+            c.transportControls.sendCustomAction(act, act.extras)
         }
-        val act = actionWith(c, SHUFFLE_WORDS) ?: return ctx.getString(R.string.no_shuffle)
-        c.transportControls.sendCustomAction(act, act.extras)
+        MediaRepo.forceShuffle(target)
         return null
     }
 
     /** Повтор по кругу: выключен, весь список, один трек, снова выключен. */
     fun cycleRepeat(ctx: Context, c: MediaController): String? {
         val cc = compat(ctx, c)
-        val mode = repeatMode(cc)
-        if (mode != -1 && cc != null) {
+        val i = info(ctx, c)
+        if (!i.repeatSupported) return ctx.getString(R.string.no_repeat)
+        val next = when (MediaRepo.effectiveRepeat(i.repeatMode)) {
+            0 -> 2
+            2 -> 1
+            else -> 0
+        }
+        if (repeatMode(cc) != -1 && cc != null) {
             cc.transportControls.setRepeatMode(
-                when (mode) {
-                    PlaybackStateCompat.REPEAT_MODE_NONE -> PlaybackStateCompat.REPEAT_MODE_ALL
-                    PlaybackStateCompat.REPEAT_MODE_ALL, PlaybackStateCompat.REPEAT_MODE_GROUP -> PlaybackStateCompat.REPEAT_MODE_ONE
+                when (next) {
+                    2 -> PlaybackStateCompat.REPEAT_MODE_ALL
+                    1 -> PlaybackStateCompat.REPEAT_MODE_ONE
                     else -> PlaybackStateCompat.REPEAT_MODE_NONE
                 },
             )
-            return null
+        } else {
+            val act = actionWith(c, REPEAT_WORDS) ?: return ctx.getString(R.string.no_repeat)
+            c.transportControls.sendCustomAction(act, act.extras)
         }
-        val act = actionWith(c, REPEAT_WORDS) ?: return ctx.getString(R.string.no_repeat)
-        c.transportControls.sendCustomAction(act, act.extras)
+        MediaRepo.forceRepeat(next)
         return null
     }
 

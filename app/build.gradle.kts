@@ -8,11 +8,23 @@ android {
     namespace = "app.lanewidget"
     compileSdk = 34
 
+    // Постоянный ключ подписи. Без него каждая сборка на GitHub Actions подписывается новым
+    // случайным ключом, и Android не даёт поставить новую версию поверх старой.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("lane.keystore")
+            storePassword = "lanewidget"
+            keyAlias = "lane"
+            keyPassword = "lanewidget"
+        }
+    }
+
     defaultConfig {
         applicationId = "app.lanewidget"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        // Номер версии растёт сам: CI передаёт номер запуска сборки.
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
         versionName = "1.0"
     }
 

@@ -3,8 +3,11 @@ package app.lanewidget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.media.session.MediaController
+import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -77,9 +80,36 @@ class ControlAction : ActionCallback {
         val c = MediaRepo.pick(context, MediaRepo.controllers(context)) ?: return
         val t = c.transportControls
 
+        val wasPlaying = MediaRepo.isPlayingState(c.playbackState?.state)
+        var keepPaused = false
+
         val message: String? = when (parameters[CMD]) {
-            "prev" -> { t.skipToPrevious(); null }
-            "next" -> { t.skipToNext(); null }
+            "prev" -> {
+                if (wasPlaying) {
+                    t.skipToPrevious()
+                } else {
+                    // На паузе: если трек идёт дольше трёх секунд, просто в начало, иначе на трек назад.
+                    // Музыку в обоих случаях не включаем.
+                    val position = c.playbackState?.position ?: 0L
+                    if (position > RESTART_THRESHOLD_MS) {
+                        t.seekTo(0)
+                        MediaRepo.forceStartOfTrack()
+                    } else {
+                        t.skipToPrevious()
+                        MediaRepo.forceStartOfTrack()
+                        keepPaused = true
+                    }
+                }
+                null
+            }
+            "next" -> {
+                t.skipToNext()
+                if (!wasPlaying) {
+                    MediaRepo.forceStartOfTrack()
+                    keepPaused = true
+                }
+                null
+            }
             "like" -> PlayerControls.toggleLike(context, c)
             "shuffle" -> PlayerControls.toggleShuffle(context, c)
             "repeat" -> PlayerControls.cycleRepeat(context, c)
@@ -93,11 +123,45 @@ class ControlAction : ActionCallback {
         }
         if (message != null) toast(context, message)
 
+        if (keepPaused) MediaRepo.forcePlaying(false)
+
         // Одно мгновенное обновление, а дальше виджет обновят колбэки плеера (MediaListener).
-        // Ещё одно через секунду страхует случай, когда плеер не прислал колбэк.
         WidgetUpdater.refresh(context)
+
+        // Многие плееры после перехода на другой трек сами начинают играть. Следим и ставим на паузу.
+        if (keepPaused) holdPause(c)
+
+        // Ещё одно обновление через секунду страхует случай, когда плеер не прислал колбэк.
         delay(1000)
         WidgetUpdater.refresh(context)
+        if (parameters[CMD] == "shuffle" || parameters[CMD] == "repeat") {
+            // Плееры часто подтверждают режим с задержкой, проверяем ещё раз позже.
+            delay(1500)
+            WidgetUpdater.refresh(context)
+        }
+    }
+
+    /**
+     * После перехода на другой трек на паузе ждём, не начнёт ли плеер играть сам, и ставим на паузу.
+     * Паузу ставим в момент PLAYING или BUFFERING, чтобы звук не успел пойти. Если за секунду
+     * плеер так и остался на паузе, значит он послушно не стал играть, и можно заканчивать.
+     */
+    private suspend fun holdPause(c: MediaController) {
+        val t = c.transportControls
+        val start = SystemClock.elapsedRealtime()
+        var pausedByUs = false
+        while (SystemClock.elapsedRealtime() - start < 2500) {
+            delay(70)
+            val st = c.playbackState?.state
+            if (st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING) {
+                t.pause()
+                pausedByUs = true
+            } else if ((st == PlaybackState.STATE_PAUSED || st == PlaybackState.STATE_STOPPED) &&
+                (pausedByUs || SystemClock.elapsedRealtime() - start > 1000)
+            ) {
+                break
+            }
+        }
     }
 
     private fun toast(ctx: Context, text: String) {
@@ -106,6 +170,9 @@ class ControlAction : ActionCallback {
 
     companion object {
         val CMD = ActionParameters.Key<String>("cmd")
+
+        /** Если трек идёт дольше этого времени, «назад» на паузе перематывает в начало, а не на прошлый трек. */
+        private const val RESTART_THRESHOLD_MS = 3000L
     }
 }
 

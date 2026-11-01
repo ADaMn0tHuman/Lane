@@ -145,6 +145,7 @@ class DiagnosticsActivity : Activity() {
         sb.appendLine("последнее удачное: ${time(WidgetUpdater.lastOkAt)}")
         WidgetUpdater.lastError?.let { sb.appendLine("последняя ошибка: $it") }
         sb.appendLine("идёт смена обложки: ${yn(CoverFade.running)}")
+        sb.appendLine("последнее нажатие на виджет: ${OpenPlayerActivity.lastResult}")
         sb.appendLine()
 
         val all = if (has) MediaRepo.controllers(this, includeBlocked = true) else emptyList()

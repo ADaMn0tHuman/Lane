@@ -13,6 +13,7 @@ import android.media.session.PlaybackState
 import android.os.PowerManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.support.v4.media.session.MediaControllerCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,7 @@ class MediaListener : NotificationListenerService() {
     private var manager: MediaSessionManager? = null
     private var screenReceiver: BroadcastReceiver? = null
     private val bound = mutableListOf<Pair<MediaController, Cb>>()
+    private val boundCompat = mutableListOf<Pair<MediaControllerCompat, MediaControllerCompat.Callback>>()
 
     private val component by lazy { ComponentName(this, MediaListener::class.java) }
 
@@ -132,6 +134,8 @@ class MediaListener : NotificationListenerService() {
         runCatching { manager?.removeOnActiveSessionsChangedListener(sessionsListener) }
         bound.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
         bound.clear()
+        boundCompat.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
+        boundCompat.clear()
         screenReceiver?.let { runCatching { unregisterReceiver(it) } }
         screenReceiver = null
         pending?.cancel()
@@ -143,10 +147,22 @@ class MediaListener : NotificationListenerService() {
         val list = raw.filter { !Blocklist.isBlocked(this, it.packageName) }
         bound.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
         bound.clear()
+        boundCompat.forEach { (c, cb) -> runCatching { c.unregisterCallback(cb) } }
+        boundCompat.clear()
         list.forEach { c ->
             val cb = Cb(c.packageName)
             runCatching { c.registerCallback(cb) }
             bound.add(c to cb)
+
+            // Смена перемешивания и повтора не вызывает обычных колбэков, ловим отдельно.
+            PlayerControls.compat(applicationContext, c)?.let { cc ->
+                val ccb = object : MediaControllerCompat.Callback() {
+                    override fun onShuffleModeChanged(shuffleMode: Int) = refresh()
+                    override fun onRepeatModeChanged(repeatMode: Int) = refresh()
+                }
+                runCatching { cc.registerCallback(ccb) }
+                boundCompat.add(cc to ccb)
+            }
         }
         val playing = list.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING }
         if (playing.size == 1) MediaRepo.markActive(applicationContext, playing.first().packageName)

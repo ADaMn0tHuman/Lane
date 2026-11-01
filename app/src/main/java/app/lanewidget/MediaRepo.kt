@@ -63,10 +63,16 @@ object MediaRepo {
     private var coverKey: String? = null
     private var coverBitmap: Bitmap? = null
 
-    // Кэш уменьшенной обложки, пришедшей картинкой. Без него при обновлении раз в секунду
-    // мы бы каждый раз заново создавали уменьшенную копию.
-    private var rawCover: Bitmap? = null
-    private var rawCoverScaled: Bitmap? = null
+    // Кэш уменьшенной обложки, пришедшей картинкой, по отпечатку картинки.
+    private var coverCacheKey: String? = null
+    private var coverCacheBitmap: Bitmap? = null
+
+    // Мгновенная реакция кнопок перемешивания, повтора и перемотки в начало.
+    @Volatile private var forcedShuffle: Boolean? = null
+    @Volatile private var forcedShuffleUntil = 0L
+    @Volatile private var forcedRepeat: Int? = null
+    @Volatile private var forcedRepeatUntil = 0L
+    @Volatile private var forcedZeroUntil = 0L
 
     fun formatTime(ms: Long): String {
         val total = (ms / 1000).coerceAtLeast(0)
@@ -102,6 +108,35 @@ object MediaRepo {
     fun forceLiked(value: Boolean) {
         forcedLiked = value
         forcedLikedUntil = SystemClock.elapsedRealtime() + 3000
+    }
+
+    fun forceShuffle(value: Boolean) {
+        forcedShuffle = value
+        forcedShuffleUntil = SystemClock.elapsedRealtime() + 3500
+    }
+
+    fun effectiveShuffle(real: Boolean): Boolean {
+        val f = forcedShuffle
+        if (f != null && SystemClock.elapsedRealtime() < forcedShuffleUntil && real != f) return f
+        if (f != null) forcedShuffle = null
+        return real
+    }
+
+    fun forceRepeat(value: Int) {
+        forcedRepeat = value
+        forcedRepeatUntil = SystemClock.elapsedRealtime() + 3500
+    }
+
+    fun effectiveRepeat(real: Int): Int {
+        val f = forcedRepeat
+        if (f != null && SystemClock.elapsedRealtime() < forcedRepeatUntil && real != f) return f
+        if (f != null) forcedRepeat = null
+        return real
+    }
+
+    /** Показываем «0:00» сразу после перемотки в начало, не дожидаясь ответа плеера. */
+    fun forceStartOfTrack() {
+        forcedZeroUntil = SystemClock.elapsedRealtime() + 2500
     }
 
     /** «Лайкнут ли трек» с учётом нажатия, которое плеер ещё не подтвердил. */
@@ -238,14 +273,18 @@ object MediaRepo {
             position += ((now - state.lastPositionUpdateTime) * state.playbackSpeed).toLong()
         }
         if (duration > 0) position = position.coerceAtMost(duration)
+        if (now < forcedZeroUntil) {
+            if (position <= 1500) forcedZeroUntil = 0 else position = 0
+        }
         val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
         val info = PlayerControls.info(ctx, c)
+        val cover = loadCover(ctx, meta)
 
         return MediaState(
             title = title,
             artist = artist,
-            cover = CoverFade.frame(loadCover(ctx, meta)),
+            cover = CoverFade.frame(cover.first, cover.second),
             playing = playing,
             progress = progress,
             packageName = c.packageName,
@@ -254,32 +293,45 @@ object MediaRepo {
             durationMs = duration,
             liked = effectiveLiked(info.liked),
             shuffleSupported = info.shuffleSupported,
-            shuffleOn = info.shuffleOn,
+            shuffleOn = effectiveShuffle(info.shuffleOn),
             repeatSupported = info.repeatSupported,
-            repeatMode = info.repeatMode,
+            repeatMode = effectiveRepeat(info.repeatMode),
             downloadSupported = info.downloadSupported,
             downloaded = info.downloaded,
         )
     }
 
-    private suspend fun loadCover(ctx: Context, meta: MediaMetadata): Bitmap? {
+    /** Короткий отпечаток картинки: размер и несколько пикселей. Нужен, чтобы узнавать ту же обложку. */
+    private fun fingerprint(b: Bitmap): String = try {
+        var h = 17
+        val w = b.width
+        val hh = b.height
+        for (i in 1..5) for (j in 1..5) h = h * 31 + b.getPixel(w * i / 6, hh * j / 6)
+        "${w}x$hh:$h"
+    } catch (e: Exception) {
+        "${b.width}x${b.height}:${b.byteCount}"
+    }
+
+    /** Возвращает пару «ключ обложки, картинка». Ключ меняется только когда меняется сама картинка. */
+    private fun loadCover(ctx: Context, meta: MediaMetadata): Pair<String?, Bitmap?> {
         val bmp = meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: meta.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
         if (bmp != null) {
-            if (bmp === rawCover) return rawCoverScaled
+            val key = "b:" + fingerprint(bmp)
+            if (key == coverCacheKey) return key to coverCacheBitmap
             val scaled = scale(bmp)
-            rawCover = bmp
-            rawCoverScaled = scaled
-            return scaled
+            coverCacheKey = key
+            coverCacheBitmap = scaled
+            return key to scaled
         }
 
         val uri = meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: meta.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: meta.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
-            ?: return null
+            ?: return null to null
 
-        if (uri == coverKey) return coverBitmap
+        if (uri == coverKey) return "u:$uri" to coverBitmap
 
         // Обложки ещё нет: качаем в фоне. Пока показываем прошлую, а когда скачается, виджет
         // обновится сам (с плавной сменой картинки). Название трека больше не ждёт сеть.
@@ -296,7 +348,7 @@ object MediaRepo {
                 if (loaded != null) WidgetUpdater.refresh(app)
             }
         }
-        return coverBitmap
+        return coverKey?.let { "u:$it" } to coverBitmap
     }
 
     private fun fetch(ctx: Context, uriStr: String): Bitmap? = runCatching {
