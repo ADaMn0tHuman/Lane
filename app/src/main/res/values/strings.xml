@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lane Widget</string>
+    <string name="widget_description">Минималистичный плеер для Lane</string>
+
+    <string name="idle_title">Ничего не играет</string>
+    <string name="idle_artist">Включи трек в Lane</string>
+    <string name="need_access">Нужен доступ</string>
+    <string name="tap_to_grant">Нажми, чтобы выдать</string>
+
+    <string name="main_sub">Виджет 4×2 показывает текущий трек из Lane и любого другого плеера и управляет им.</string>
+    <string name="access_on">Доступ к уведомлениям: включён</string>
+    <string name="access_off">Доступ к уведомлениям: выключен</string>
+    <string name="grant_button">Выдать доступ</string>
+    <string name="steps">1. Выдай доступ к уведомлениям для Lane Widget.\n\n2. Долгое нажатие на рабочем столе → Виджеты → Lane Widget.\n\n3. Растяни до 4×2 и положи над доком.</string>
+</resources>
