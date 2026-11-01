@@ -255,8 +255,8 @@ private fun WidgetContent(s: MediaState) {
                 Spacer(modifier = GlanceModifier.height(3.dp))
                 ProgressRow(s)
                 Spacer(modifier = GlanceModifier.height(2.dp))
-                // На низком виджете второй ряд кнопок скрыт, обложка и название остаются.
-                Controls(s, showMini = LocalSize.current.height >= 170.dp)
+                // Второй ряд (перемешать, повтор, скачать) скрывается только на очень низком виджете.
+                Controls(s, showMini = LocalSize.current.height >= 120.dp)
             }
         }
     }

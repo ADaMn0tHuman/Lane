@@ -82,10 +82,7 @@ private fun CompactContent(s: MediaState) {
             modifier = GlanceModifier.fillMaxSize().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = GlanceModifier.size(unit), contentAlignment = Alignment.BottomStart) {
-                Cover(s, unit, 14.dp)
-                AppBadge(s, 18.dp)
-            }
+            Cover(s, unit, 14.dp)
             Column(
                 modifier = GlanceModifier.defaultWeight().padding(start = 10.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
