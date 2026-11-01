@@ -3,19 +3,21 @@ package app.lanewidget
 import androidx.compose.ui.graphics.Color
 
 /**
- * Текущие цвета. Три базовых (фон, акцент, текст) задаёт выбранный пак,
- * остальные оттенки вычисляются из них. Акцент может быть заменён цветом обложки (виджет).
+ * Текущие цвета. Фон, акцент, текст и точка задаёт выбранный пак, остальные оттенки вычисляются.
+ * Акцент может быть заменён цветом обложки (виджет).
  */
 object Palette {
     private var _bg = 0xFF232323.toInt()
     private var _accent = 0xFFF4A9C0.toInt()
     private var _text = 0xFFF2F2F2.toInt()
+    private var _dot: Int? = null
     private var _override: Int? = null
 
     fun load(p: Pack) {
         _bg = android.graphics.Color.parseColor(p.bg)
         _accent = android.graphics.Color.parseColor(p.accent)
         _text = android.graphics.Color.parseColor(p.text)
+        _dot = if (p.dot.isBlank()) null else android.graphics.Color.parseColor(p.dot)
         _override = null
     }
 
@@ -49,6 +51,7 @@ object Palette {
     val muted: Color get() = Color(mix(_text, _bg, 0.7f))
     val dim: Color get() = Color(mix(_text, _bg, 0.45f))
     val text: Color get() = Color(_text)
+    val dot: Color get() = Color(_dot ?: _text)
     val pink: Color get() = Color(accentInt)
     val onPink: Color get() = if (luminance(accentInt) > 0.55f) Color(0xFF1A1A1A) else Color(0xFFFFFFFF)
 }

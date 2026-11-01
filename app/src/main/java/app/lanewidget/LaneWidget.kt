@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalSize
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
@@ -55,7 +56,7 @@ import kotlinx.coroutines.delay
 
 class LaneWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode = SizeMode.Single
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = MediaRepo.read(context)
@@ -227,10 +228,10 @@ private fun WidgetContent(s: MediaState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Обложка 92 dp (была 84, +10 %). Текст начинается на том же расстоянии от края: 12 + 92 + 6 = 110 dp.
-            Column(horizontalAlignment = Alignment.Start) {
+            // Значок плеера лежит поверх левого нижнего угла обложки, чтобы виджет не стал выше.
+            Box(modifier = GlanceModifier.size(92.dp), contentAlignment = Alignment.BottomStart) {
                 Cover(s, 92.dp, 20.dp)
-                Spacer(modifier = GlanceModifier.height(4.dp))
-                AppBadge(s)
+                AppBadge(s, 40.dp)
             }
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 6.dp),
@@ -253,7 +254,8 @@ private fun WidgetContent(s: MediaState) {
                 Spacer(modifier = GlanceModifier.height(3.dp))
                 ProgressRow(s)
                 Spacer(modifier = GlanceModifier.height(2.dp))
-                Controls(s)
+                // На низком виджете второй ряд кнопок скрыт, обложка и название остаются.
+                Controls(s, showMini = LocalSize.current.height >= 170.dp)
             }
         }
     }
@@ -261,17 +263,17 @@ private fun WidgetContent(s: MediaState) {
 
 /** Значок приложения, которое сейчас играет. Тап переключает плеер. */
 @Composable
-private fun AppBadge(s: MediaState) {
+internal fun AppBadge(s: MediaState, size: Dp) {
     val icon = s.appIcon ?: return
     Box(
         modifier = GlanceModifier
-            .size(20.dp)
+            .size(size)
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "switch"))),
     ) {
         Image(
             provider = ImageProvider(icon),
             contentDescription = null,
-            modifier = GlanceModifier.size(20.dp).cornerRadius(5.dp),
+            modifier = GlanceModifier.size(size).cornerRadius(size / 4),
         )
     }
 }
@@ -321,7 +323,7 @@ private fun ProgressRow(s: MediaState) {
             provider = ImageProvider(ProgressBitmap.draw(s.progress)),
             contentDescription = null,
             contentScale = ContentScale.FillBounds,
-            modifier = GlanceModifier.defaultWeight().height(4.dp),
+            modifier = GlanceModifier.defaultWeight().height(8.dp),
         )
         Text(
             text = total,
@@ -338,7 +340,7 @@ private fun ProgressRow(s: MediaState) {
  * Снизу: перемешать под «назад», повтор под «вперёд», скачать под «нравится».
  */
 @Composable
-private fun Controls(s: MediaState) {
+private fun Controls(s: MediaState, showMini: Boolean = true) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
@@ -355,7 +357,7 @@ private fun Controls(s: MediaState) {
                 }
             }
         }
-        Row(
+        if (showMini) Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {

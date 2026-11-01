@@ -2,6 +2,8 @@ package app.lanewidget
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -231,7 +233,11 @@ class MainActivity : Activity() {
             label(getString(R.string.cover_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
-        for ((key, res) in listOf(ThemeStore.FLAG_ACCENT to R.string.cover_accent, ThemeStore.FLAG_BLUR to R.string.cover_blur)) {
+        for ((key, res) in listOf(
+            ThemeStore.FLAG_ACCENT to R.string.cover_accent,
+            ThemeStore.FLAG_BLUR to R.string.cover_blur,
+            ThemeStore.FLAG_AUTO to R.string.theme_auto,
+        )) {
             val on = ThemeStore.flag(this, key)
             palettesBox.addView(
                 chip(if (on) "${getString(res)} ✓" else getString(res), on) {
@@ -275,17 +281,25 @@ class MainActivity : Activity() {
         palettesBox.addView(accentField, lp)
         palettesBox.addView(label(getString(R.string.theme_text), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) })
         palettesBox.addView(textField, lp)
+        palettesBox.addView(
+            label(getString(R.string.theme_dot), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) },
+        )
+        val dotField = field(getString(R.string.theme_dot_hint), active.dot)
+        palettesBox.addView(dotField, lp)
 
         fun updatePreview() {
             val bg = ThemeStore.normalize(bgField.text.toString())
             val accent = ThemeStore.normalize(accentField.text.toString())
             val fg = ThemeStore.normalize(textField.text.toString())
-            if (bg != null && accent != null && fg != null) {
+            val dotRaw = dotField.text.toString().trim()
+            val dot = if (dotRaw.isEmpty()) fg else ThemeStore.normalize(dotRaw)
+            if (bg != null && accent != null && fg != null && dot != null) {
                 drawPreview(
                     previewBox,
                     android.graphics.Color.parseColor(bg),
                     android.graphics.Color.parseColor(accent),
                     android.graphics.Color.parseColor(fg),
+                    android.graphics.Color.parseColor(dot),
                 )
             }
         }
@@ -303,11 +317,13 @@ class MainActivity : Activity() {
                 val bg = ThemeStore.normalize(bgField.text.toString())
                 val accent = ThemeStore.normalize(accentField.text.toString())
                 val text = ThemeStore.normalize(textField.text.toString())
+                val dotRaw = dotField.text.toString().trim()
+                val dot = if (dotRaw.isEmpty()) "" else ThemeStore.normalize(dotRaw)
                 when {
                     name.isEmpty() -> toastMsg(R.string.theme_bad_name)
-                    bg == null || accent == null || text == null -> toastMsg(R.string.theme_bad_hex)
+                    bg == null || accent == null || text == null || dot == null -> toastMsg(R.string.theme_bad_hex)
                     else -> {
-                        val err = ThemeStore.save(this, Pack(name, bg, accent, text))
+                        val err = ThemeStore.save(this, Pack(name, bg!!, accent!!, text!!, dot ?: ""))
                         when (err) {
                             "builtin" -> toastMsg(R.string.theme_builtin)
                             "name" -> toastMsg(R.string.theme_bad_name)
@@ -324,6 +340,36 @@ class MainActivity : Activity() {
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) },
         )
+
+        palettesBox.addView(
+            pillButton(getString(R.string.theme_copy)) {
+                val cm = getSystemService(ClipboardManager::class.java)
+                cm.setPrimaryClip(ClipData.newPlainText("Lane pack", ThemeStore.encode(ThemeStore.active(this))))
+                toastMsg(R.string.theme_copied)
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(16) },
+        )
+        val importField = field(getString(R.string.theme_import_hint), "")
+        palettesBox.addView(importField, lp)
+        palettesBox.addView(
+            pillButton(getString(R.string.theme_import)) {
+                val p = ThemeStore.decode(importField.text.toString())
+                if (p == null) {
+                    toastMsg(R.string.theme_bad_import)
+                } else {
+                    when (ThemeStore.save(this, p)) {
+                        "builtin" -> toastMsg(R.string.theme_builtin)
+                        "name" -> toastMsg(R.string.theme_bad_name)
+                        else -> {
+                            ThemeStore.setActive(this, p.name)
+                            refreshWidgets()
+                            recreate()
+                        }
+                    }
+                }
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
     }
 
     private fun refreshWidgets() {
@@ -336,7 +382,7 @@ class MainActivity : Activity() {
     }
 
     /** Макет карточки виджета в заданных цветах. Перерисовывается при каждом изменении поля. */
-    private fun drawPreview(box: LinearLayout, bg: Int, accent: Int, fg: Int) {
+    private fun drawPreview(box: LinearLayout, bg: Int, accent: Int, fg: Int, dot: Int) {
         box.removeAllViews()
         val track = ColorUtils.blendARGB(bg, fg, 0.2f)
         val dim = ColorUtils.blendARGB(fg, bg, 0.45f)
@@ -381,9 +427,19 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             background = shape(track, dp(2))
         }
+        // Точка над полоской на месте текущей позиции (40 %).
+        val dotRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        dotRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 0.4f))
+        dotRow.addView(View(this).apply { background = shape(dot, dp(4)) }, LinearLayout.LayoutParams(dp(8), dp(8)))
+        dotRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 0.6f))
+        right.addView(dotRow, LinearLayout.LayoutParams(match, dp(8)).apply { topMargin = dp(8) })
+
         bar.addView(View(this).apply { background = shape(accent, dp(2)) }, LinearLayout.LayoutParams(0, match, 0.4f))
         bar.addView(View(this), LinearLayout.LayoutParams(0, match, 0.6f))
-        right.addView(bar, LinearLayout.LayoutParams(match, dp(4)).apply { topMargin = dp(10) })
+        right.addView(bar, LinearLayout.LayoutParams(match, dp(4)))
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL

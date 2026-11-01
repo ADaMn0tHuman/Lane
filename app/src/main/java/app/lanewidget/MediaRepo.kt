@@ -255,8 +255,9 @@ object MediaRepo {
     /** Размытая обложка: уменьшаем до 12 px, растягиваем обратно и затемняем, чтобы читался текст. */
     private fun blurFrom(cover: Bitmap, key: String): Bitmap {
         if (key == blurKey) blurBitmap?.let { return it }
-        val small = Bitmap.createScaledBitmap(cover, 12, 12, true)
-        val big = Bitmap.createScaledBitmap(small, 240, 240, true)
+        // Несколько ступеней уменьшения и увеличения: так размытие получается мягким, без квадратиков.
+        var big = Bitmap.createScaledBitmap(cover, 24, 24, true)
+        for (sz in intArrayOf(48, 96, 192, 320)) big = Bitmap.createScaledBitmap(big, sz, sz, true)
         Canvas(big).drawColor(0x8C000000.toInt())
         blurKey = key
         blurBitmap = big

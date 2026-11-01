@@ -77,8 +77,17 @@
     <string name="theme_builtin">Это название занято встроенным паком</string>
     <string name="update_sig_mismatch">Обновление подписано другим ключом, установка отменена</string>
 
-    <string name="cover_title">Оформление из обложки</string>
+    <string name="cover_title">Оформление</string>
     <string name="cover_accent">Акцент из обложки</string>
     <string name="cover_blur">Размытый фон из обложки</string>
     <string name="preview_title">Как будет выглядеть</string>
+
+    <string name="theme_auto">Авто: тёмная или светлая по системе</string>
+    <string name="theme_dot">Точка прогресса</string>
+    <string name="theme_dot_hint">#RRGGBB, пусто = как текст</string>
+    <string name="theme_copy">Скопировать этот пак строкой</string>
+    <string name="theme_copied">Пак скопирован</string>
+    <string name="theme_import">Импортировать пак из строки</string>
+    <string name="theme_import_hint">Название: #фон #акцент #текст [#точка]</string>
+    <string name="theme_bad_import">Строка не распознана. Формат: Название: #фон #акцент #текст</string>
 </resources>
