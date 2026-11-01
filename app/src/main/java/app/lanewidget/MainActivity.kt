@@ -17,6 +17,11 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.text.Editable
+import android.text.TextUtils
+import android.text.TextWatcher
+import android.view.View
+import androidx.core.graphics.ColorUtils
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -117,13 +122,6 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
         )
 
-        content.addView(
-            label(getString(R.string.like_title), 20f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(32), 0, dp(6)) },
-        )
-        content.addView(label(getString(R.string.like_hint), 14f, Palette.dim.toArgb()))
-        actionsBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        content.addView(actionsBox)
 
         val scroll = ScrollView(this).apply {
             setBackgroundColor(bg)
@@ -150,7 +148,6 @@ class MainActivity : Activity() {
         // Служба поднимается не мгновенно, поэтому смотрим статус ещё раз через 3,5 секунды.
         serviceStatus.postDelayed({ showServiceStatus() }, 3500)
         renderPlayers()
-        renderActions()
         renderPalettes()
     }
 
@@ -214,6 +211,7 @@ class MainActivity : Activity() {
             palettesBox.addView(
                 chip(if (isOn) "${p.name} ✓" else p.name, isOn) {
                     ThemeStore.setActive(this, p.name)
+                    refreshWidgets()
                     recreate()
                 },
             )
@@ -222,11 +220,34 @@ class MainActivity : Activity() {
             palettesBox.addView(
                 pillButton(getString(R.string.theme_delete)) {
                     ThemeStore.delete(this, active.name)
+                    refreshWidgets()
                     recreate()
                 },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10) },
             )
         }
+
+        palettesBox.addView(
+            label(getString(R.string.cover_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        for ((key, res) in listOf(ThemeStore.FLAG_ACCENT to R.string.cover_accent, ThemeStore.FLAG_BLUR to R.string.cover_blur)) {
+            val on = ThemeStore.flag(this, key)
+            palettesBox.addView(
+                chip(if (on) "${getString(res)} ✓" else getString(res), on) {
+                    ThemeStore.setFlag(this, key, !on)
+                    refreshWidgets()
+                    renderPalettes()
+                },
+            )
+        }
+
+        palettesBox.addView(
+            label(getString(R.string.preview_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(6)) },
+        )
+        val previewBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        palettesBox.addView(previewBox)
 
         palettesBox.addView(
             label(getString(R.string.theme_new), 16f, Palette.text.toArgb(), bold = true)
@@ -254,6 +275,27 @@ class MainActivity : Activity() {
         palettesBox.addView(accentField, lp)
         palettesBox.addView(label(getString(R.string.theme_text), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(6), 0, 0) })
         palettesBox.addView(textField, lp)
+
+        fun updatePreview() {
+            val bg = ThemeStore.normalize(bgField.text.toString())
+            val accent = ThemeStore.normalize(accentField.text.toString())
+            val fg = ThemeStore.normalize(textField.text.toString())
+            if (bg != null && accent != null && fg != null) {
+                drawPreview(
+                    previewBox,
+                    android.graphics.Color.parseColor(bg),
+                    android.graphics.Color.parseColor(accent),
+                    android.graphics.Color.parseColor(fg),
+                )
+            }
+        }
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) = updatePreview()
+        }
+        listOf(bgField, accentField, textField).forEach { it.addTextChangedListener(watcher) }
+        updatePreview()
 
         palettesBox.addView(
             pillButton(getString(R.string.theme_save)) {
@@ -284,6 +326,89 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun refreshWidgets() {
+        CoroutineScope(Dispatchers.Main).launch { WidgetUpdater.refresh(applicationContext) }
+    }
+
+    private fun shape(color: Int, radius: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = radius.toFloat()
+    }
+
+    /** Макет карточки виджета в заданных цветах. Перерисовывается при каждом изменении поля. */
+    private fun drawPreview(box: LinearLayout, bg: Int, accent: Int, fg: Int) {
+        box.removeAllViews()
+        val track = ColorUtils.blendARGB(bg, fg, 0.2f)
+        val dim = ColorUtils.blendARGB(fg, bg, 0.45f)
+        val coverTone = ColorUtils.blendARGB(bg, fg, 0.07f)
+        val onAccent = if (ColorUtils.calculateLuminance(accent) > 0.55) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()
+        val wrap = LinearLayout.LayoutParams.WRAP_CONTENT
+        val match = LinearLayout.LayoutParams.MATCH_PARENT
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = shape(bg, dp(26))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(View(this).apply { background = shape(coverTone, dp(18)) }, LinearLayout.LayoutParams(dp(92), dp(92)))
+        left.addView(
+            View(this).apply { background = shape(accent, dp(5)) },
+            LinearLayout.LayoutParams(dp(20), dp(20)).apply { topMargin = dp(4) },
+        )
+        card.addView(left)
+
+        val right = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        right.addView(TextView(this).apply {
+            this.text = "Название трека"
+            setTextColor(fg)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setSingleLine()
+            ellipsize = TextUtils.TruncateAt.END
+        })
+        right.addView(TextView(this).apply {
+            this.text = "Исполнитель"
+            setTextColor(accent)
+            textSize = 13f
+        })
+
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = shape(track, dp(2))
+        }
+        bar.addView(View(this).apply { background = shape(accent, dp(2)) }, LinearLayout.LayoutParams(0, match, 0.4f))
+        bar.addView(View(this), LinearLayout.LayoutParams(0, match, 0.6f))
+        right.addView(bar, LinearLayout.LayoutParams(match, dp(4)).apply { topMargin = dp(10) })
+
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        controls.addView(TextView(this).apply { this.text = "0:55"; setTextColor(dim); textSize = 11f })
+        controls.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        controls.addView(
+            TextView(this).apply {
+                this.text = "▶"
+                setTextColor(onAccent)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                background = shape(accent, dp(20))
+            },
+            LinearLayout.LayoutParams(dp(40), dp(40)),
+        )
+        controls.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        controls.addView(TextView(this).apply { this.text = "3:36"; setTextColor(dim); textSize = 11f })
+        right.addView(controls, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(10) })
+
+        card.addView(right, LinearLayout.LayoutParams(0, wrap, 1f))
+        box.addView(card, LinearLayout.LayoutParams(match, wrap))
+    }
+
     private fun toastMsg(res: Int) = android.widget.Toast.makeText(this, res, android.widget.Toast.LENGTH_LONG).show()
 
     /** Все активные плееры, включая скрытые, с переключателем «показывать / скрыть». */
@@ -297,7 +422,7 @@ class MainActivity : Activity() {
             )
             return
         }
-        for (c in list) {
+        for (c in list.filter { !it.packageName.contains("youtube") }) {
             val hidden = Blocklist.isBlocked(this, c.packageName)
             val state = getString(if (hidden) R.string.player_hidden else R.string.player_shown)
             playersBox.addView(chip("${appLabel(c.packageName)}: $state", !hidden) {
@@ -305,7 +430,6 @@ class MainActivity : Activity() {
                 MediaListener.instance?.reattach()
                 CoroutineScope(Dispatchers.Main).launch { WidgetUpdater.refresh(applicationContext) }
                 renderPlayers()
-                renderActions()
             })
         }
     }

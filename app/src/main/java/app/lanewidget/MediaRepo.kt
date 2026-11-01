@@ -3,6 +3,7 @@ package app.lanewidget
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.BitmapFactory
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -36,6 +37,8 @@ data class MediaState(
     val repeatMode: Int = 0,
     val downloadSupported: Boolean = false,
     val downloaded: Boolean = false,
+    val appIcon: Bitmap? = null,
+    val blurBg: Bitmap? = null,
 )
 
 object MediaRepo {
@@ -61,6 +64,12 @@ object MediaRepo {
 
     // Кэш обложки, загруженной по ссылке.
     private var coverKey: String? = null
+
+    /** Последнее показанное состояние: нужно, чтобы после конца трека оставаться на нём. */
+    private var lastShown: MediaState? = null
+    private val iconCache = HashMap<String, Bitmap>()
+    private var blurKey: String? = null
+    private var blurBitmap: Bitmap? = null
     private var coverBitmap: Bitmap? = null
 
     // Кэш уменьшенной обложки, пришедшей картинкой, по отпечатку картинки.
@@ -227,6 +236,57 @@ object MediaRepo {
 
     // ---- Чтение состояния для виджета ----
 
+    /** Иконка приложения плеера для значка в углу обложки. Кэшируется по пакету. */
+    private fun appIcon(ctx: Context, pkg: String?): Bitmap? {
+        if (pkg == null) return null
+        iconCache[pkg]?.let { return it }
+        return try {
+            val d = ctx.packageManager.getApplicationIcon(pkg)
+            val b = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+            d.setBounds(0, 0, 64, 64)
+            d.draw(Canvas(b))
+            iconCache[pkg] = b
+            b
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Размытая обложка: уменьшаем до 12 px, растягиваем обратно и затемняем, чтобы читался текст. */
+    private fun blurFrom(cover: Bitmap, key: String): Bitmap {
+        if (key == blurKey) blurBitmap?.let { return it }
+        val small = Bitmap.createScaledBitmap(cover, 12, 12, true)
+        val big = Bitmap.createScaledBitmap(small, 240, 240, true)
+        Canvas(big).drawColor(0x8C000000.toInt())
+        blurKey = key
+        blurBitmap = big
+        return big
+    }
+
+    /** Самый насыщенный из достаточно ярких цветов обложки. */
+    private fun dominant(b: Bitmap): Int? {
+        val s = Bitmap.createScaledBitmap(b, 16, 16, true)
+        val hsv = FloatArray(3)
+        var best: Int? = null
+        var bestScore = -1f
+        for (x in 0 until 16) for (y in 0 until 16) {
+            val c = s.getPixel(x, y)
+            android.graphics.Color.colorToHSV(c, hsv)
+            val score = hsv[1] * hsv[2]
+            if (hsv[2] > 0.35f && score > bestScore) {
+                bestScore = score
+                best = c
+            }
+        }
+        return best
+    }
+
+    /** Нет активного плеера: показываем последний трек на паузе, в самом конце. */
+    private fun idleOrLast(idle: MediaState): MediaState {
+        val l = lastShown ?: return idle
+        return l.copy(playing = false, positionMs = l.durationMs, progress = 1f)
+    }
+
     suspend fun read(ctx: Context): MediaState {
         ThemeStore.apply(ctx)
         if (!hasAccess(ctx)) {
@@ -243,7 +303,7 @@ object MediaRepo {
             null, false, 0f, null, true,
         )
 
-        val c = pick(ctx, controllers(ctx)) ?: return idle
+        val c = pick(ctx, controllers(ctx)) ?: return idleOrLast(idle)
         val meta = c.metadata ?: return idle
         val state = c.playbackState
         val now = SystemClock.elapsedRealtime()
@@ -277,12 +337,22 @@ object MediaRepo {
         if (now < forcedZeroUntil) {
             if (position <= 1500) forcedZeroUntil = 0 else position = 0
         }
+        // Трек дошёл до конца и плеер остановился или сбросил позицию: оставляем конец трека на паузе.
+        val prev = lastShown
+        if (!playing && prev != null && prev.title == title && duration > 0 &&
+            prev.durationMs > 0 && prev.positionMs >= prev.durationMs - 1500 && position < duration - 1500
+        ) {
+            position = duration
+        }
         val progress = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
         val info = PlayerControls.info(ctx, c)
         val cover = loadCover(ctx, meta)
+        val coverBitmap = cover.second
+        // Акцент из обложки только если включено пользователем, иначе берётся цвет пака.
+        Palette.setAccent(if (ThemeStore.flag(ctx, ThemeStore.FLAG_ACCENT)) coverBitmap?.let { dominant(it) } else null)
 
-        return MediaState(
+        val result = MediaState(
             title = title,
             artist = artist,
             cover = CoverFade.frame(cover.first, cover.second),
@@ -299,7 +369,15 @@ object MediaRepo {
             repeatMode = effectiveRepeat(info.repeatMode),
             downloadSupported = info.downloadSupported,
             downloaded = info.downloaded,
+            appIcon = appIcon(ctx, c.packageName),
+            blurBg = if (ThemeStore.flag(ctx, ThemeStore.FLAG_BLUR) && coverBitmap != null) {
+                blurFrom(coverBitmap, cover.first ?: "")
+            } else {
+                null
+            },
         )
+        lastShown = result
+        return result
     }
 
     /** Короткий отпечаток картинки: размер и несколько пикселей. Нужен, чтобы узнавать ту же обложку. */

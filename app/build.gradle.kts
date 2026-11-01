@@ -29,7 +29,7 @@ android {
         targetSdk = 34
         // Номер версии растёт сам: CI передаёт номер запуска сборки.
         versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
-        versionName = "1.2"
+        versionName = "1.3"
     }
 
     buildTypes {

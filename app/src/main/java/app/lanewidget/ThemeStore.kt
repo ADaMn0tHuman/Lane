@@ -26,6 +26,15 @@ object ThemeStore {
 
     fun isBuiltIn(name: String) = BUILT_IN.any { it.name == name }
 
+    const val FLAG_ACCENT = "cover_accent"
+    const val FLAG_BLUR = "cover_blur"
+
+    fun flag(ctx: Context, key: String): Boolean = prefs(ctx).getBoolean(key, false)
+
+    fun setFlag(ctx: Context, key: String, value: Boolean) {
+        prefs(ctx).edit().putBoolean(key, value).apply()
+    }
+
     /** Принимает «#1e1e2e», «1e1e2e», пробелы по краям. Возвращает #RRGGBB или null. */
     fun normalize(s: String): String? {
         val t = s.trim().let { if (it.startsWith("#")) it else "#$it" }

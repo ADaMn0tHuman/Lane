@@ -113,6 +113,7 @@ class ControlAction : ActionCallback {
             "like" -> PlayerControls.toggleLike(context, c)
             "shuffle" -> PlayerControls.toggleShuffle(context, c)
             "repeat" -> PlayerControls.cycleRepeat(context, c)
+            "switch" -> { switchPlayer(context, c); null }
             "download" -> PlayerControls.download(context, c)
             else -> {
                 val willPlay = !MediaRepo.isPlayingState(c.playbackState?.state)
@@ -164,6 +165,18 @@ class ControlAction : ActionCallback {
         }
     }
 
+    /** Текущий плеер останавливается, следующий в списке начинает играть. Звук не накладывается. */
+    private fun switchPlayer(ctx: Context, from: MediaController) {
+        val list = MediaRepo.controllers(ctx)
+        val i = list.indexOfFirst { it.packageName == from.packageName }
+        if (i < 0 || list.size < 2) return
+        val next = list[(i + 1) % list.size]
+        if (MediaRepo.isPlayingState(from.playbackState?.state)) from.transportControls.pause()
+        MediaRepo.markActive(ctx, next.packageName)
+        MediaRepo.forcePlaying(true)
+        next.transportControls.play()
+    }
+
     private fun toast(ctx: Context, text: String) {
         Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, text, Toast.LENGTH_LONG).show() }
     }
@@ -195,34 +208,71 @@ private fun WidgetContent(s: MediaState) {
         .fillMaxSize()
         .background(ColorProvider(Palette.card))
         .cornerRadius(30.dp)
-        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
-    Row(modifier = root, verticalAlignment = Alignment.CenterVertically) {
-        Cover(s, 84.dp, 20.dp)
-        Column(
-            modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 14.dp),
+    Box(modifier = root) {
+        val blur = s.blurBg
+        if (blur != null) {
+            Image(
+                provider = ImageProvider(blur),
+                contentDescription = null,
+                modifier = GlanceModifier.fillMaxSize().cornerRadius(30.dp),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        Row(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = s.title,
-                maxLines = 1,
-                style = TextStyle(
-                    color = ColorProvider(Palette.text),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Text(
-                text = s.artist,
-                maxLines = 1,
-                style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
-            )
-            Spacer(modifier = GlanceModifier.height(3.dp))
-            ProgressRow(s)
-            Spacer(modifier = GlanceModifier.height(2.dp))
-            Controls(s)
+            // Обложка 92 dp (была 84, +10 %). Текст начинается на том же расстоянии от края: 12 + 92 + 6 = 110 dp.
+            Column(horizontalAlignment = Alignment.Start) {
+                Cover(s, 92.dp, 20.dp)
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                AppBadge(s)
+            }
+            Column(
+                modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = s.title,
+                    maxLines = 1,
+                    style = TextStyle(
+                        color = ColorProvider(Palette.text),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+                Text(
+                    text = s.artist,
+                    maxLines = 1,
+                    style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
+                )
+                Spacer(modifier = GlanceModifier.height(3.dp))
+                ProgressRow(s)
+                Spacer(modifier = GlanceModifier.height(2.dp))
+                Controls(s)
+            }
         }
+    }
+}
+
+/** Значок приложения, которое сейчас играет. Тап переключает плеер. */
+@Composable
+private fun AppBadge(s: MediaState) {
+    val icon = s.appIcon ?: return
+    Box(
+        modifier = GlanceModifier
+            .size(20.dp)
+            .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "switch"))),
+    ) {
+        Image(
+            provider = ImageProvider(icon),
+            contentDescription = null,
+            modifier = GlanceModifier.size(20.dp).cornerRadius(5.dp),
+        )
     }
 }
 

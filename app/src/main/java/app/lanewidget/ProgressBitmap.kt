@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.toArgb
 
 /**
  * Полоска прогресса, нарисованная вручную. Заливка считается в пикселях с дробной частью,
- * поэтому двигается плавно, а не шагами по проценту, как у стандартного индикатора.
+ * поэтому двигается плавно. В конце заливки рисуется точка текущей позиции.
  */
 object ProgressBitmap {
 
@@ -37,6 +37,11 @@ object ProgressBitmap {
                 canvas.restore()
             }
         }
+
+        // Точка текущей позиции. Не даём ей вылезти за края полоски.
+        val dotR = 6f
+        paint.color = Palette.text.toArgb()
+        canvas.drawCircle(fill.coerceIn(dotR, W - dotR), H / 2f, dotR, paint)
         return bmp
     }
 }

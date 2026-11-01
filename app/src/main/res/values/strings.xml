@@ -76,4 +76,9 @@
     <string name="theme_bad_hex">Цвет должен быть в формате #RRGGBB, например #1E1E2E</string>
     <string name="theme_builtin">Это название занято встроенным паком</string>
     <string name="update_sig_mismatch">Обновление подписано другим ключом, установка отменена</string>
+
+    <string name="cover_title">Оформление из обложки</string>
+    <string name="cover_accent">Акцент из обложки</string>
+    <string name="cover_blur">Размытый фон из обложки</string>
+    <string name="preview_title">Как будет выглядеть</string>
 </resources>
