@@ -221,10 +221,14 @@ private fun WidgetContent(s: MediaState) {
                 contentScale = ContentScale.Crop,
             )
         }
-        // Наклейка: над фоном, под текстом и кнопками. Нажатия проходят сквозь неё.
-        s.sticker?.let { sticker ->
+        // Наклейки: над фоном, под текстом и кнопками. Слой строится под фактический размер виджета,
+        // поэтому картинка не растягивается. Нажатия проходят сквозь неё.
+        val box = LocalSize.current
+        val w = if (box.width.value < 10f) 1080 else (box.width.value * 3).toInt().coerceAtMost(1080)
+        val h = if (box.height.value < 10f) 408 else (box.height.value * 3).toInt().coerceAtMost(1080)
+        Sticker.layer(LocalContext.current, w, h)?.let { layer ->
             Image(
-                provider = ImageProvider(sticker),
+                provider = ImageProvider(layer),
                 contentDescription = null,
                 modifier = GlanceModifier.fillMaxSize(),
                 contentScale = ContentScale.FillBounds,

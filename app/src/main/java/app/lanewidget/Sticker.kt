@@ -7,95 +7,156 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 
 /**
- * Наклейка на большом виджете. Картинка с прозрачным фоном (PNG или WebP) копируется во внутреннюю
- * память приложения. Размер и поворот применяются к слою того же размера, что виджет.
+ * Одна наклейка. scale: высота в процентах от высоты виджета. rot: поворот в градусах.
+ * x, y: центр в долях слоя (0..1). NaN означает правый верхний угол (для старых наклеек).
+ */
+data class StickerItem(val id: String, val scale: Int, val rot: Int, val x: Float, val y: Float)
+
+/**
+ * Наклейки на большом виджете. Картинки с прозрачным фоном (PNG или WebP) лежат во внутренней памяти
+ * приложения. Слой строится под фактический размер виджета, поэтому картинка не растягивается.
  * Всё, что выходит за края, обрезается.
  */
 object Sticker {
 
     private const val PREFS = "lane_widget"
     private const val KEY_ON = "sticker_on"
-    private const val KEY_SCALE = "sticker_scale"
-    private const val KEY_ROT = "sticker_rot"
-    private const val KEY_X = "sticker_x"
-    private const val KEY_Y = "sticker_y"
+    private const val KEY_LIST = "sticker_list"
+    private const val KEY_SEL = "sticker_sel"
 
-    // Слой в пикселях, соответствует виджету 4×2 (около 360×136 dp при плотности 2).
-    private const val W = 720
-    private const val H = 272
-    private const val MARGIN = 12f
+    // Ключи первой версии (одна наклейка). Нужны только для переноса.
+    private const val OLD_SCALE = "sticker_scale"
+    private const val OLD_ROT = "sticker_rot"
+    private const val OLD_X = "sticker_x"
+    private const val OLD_Y = "sticker_y"
 
-    private var sourceStamp = 0L
-    private var source: Bitmap? = null
+    const val MAX_ITEMS = 5
+
+    private val sources = HashMap<String, Pair<Long, Bitmap>>()
     private var cacheKey: String? = null
     private var cacheBmp: Bitmap? = null
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private fun file(ctx: Context) = File(ctx.filesDir, "sticker.png")
+    private fun file(ctx: Context, id: String) = File(ctx.filesDir, "sticker_$id.png")
 
-    fun hasFile(ctx: Context): Boolean = file(ctx).exists()
-
-    fun isOn(ctx: Context): Boolean = hasFile(ctx) && prefs(ctx).getBoolean(KEY_ON, false)
+    fun isOn(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_ON, false) && items(ctx).isNotEmpty()
 
     fun setOn(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean(KEY_ON, on).apply()
     }
 
-    /** Размер в процентах от высоты виджета, от 10 до 100. */
-    fun scale(ctx: Context): Int = prefs(ctx).getInt(KEY_SCALE, 40)
+    fun hasAny(ctx: Context): Boolean = items(ctx).isNotEmpty()
 
-    fun setScale(ctx: Context, value: Int) {
-        prefs(ctx).edit().putInt(KEY_SCALE, value.coerceIn(10, 100)).apply()
+    fun items(ctx: Context): List<StickerItem> {
+        val raw = prefs(ctx).getString(KEY_LIST, null) ?: return migrate(ctx)
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                StickerItem(
+                    o.getString("id"),
+                    o.getInt("scale"),
+                    o.getInt("rot"),
+                    fromStored(o.getDouble("x")),
+                    fromStored(o.getDouble("y")),
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
-    /** Поворот в градусах, от -180 до 180. */
-    fun rotation(ctx: Context): Int = prefs(ctx).getInt(KEY_ROT, 0)
+    private fun fromStored(v: Double): Float = if (v < 0) Float.NaN else v.toFloat()
+    private fun toStored(v: Float): Double = if (v.isNaN()) -1.0 else v.toDouble()
 
-    fun setRotation(ctx: Context, value: Int) {
-        prefs(ctx).edit().putInt(KEY_ROT, value.coerceIn(-180, 180)).apply()
+    private fun saveItems(ctx: Context, list: List<StickerItem>) {
+        val arr = JSONArray()
+        list.forEach {
+            arr.put(
+                JSONObject()
+                    .put("id", it.id)
+                    .put("scale", it.scale)
+                    .put("rot", it.rot)
+                    .put("x", toStored(it.x))
+                    .put("y", toStored(it.y)),
+            )
+        }
+        prefs(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
     }
 
-    /**
-     * Положение центра наклейки в долях слоя (0..1). NaN означает правый верхний угол.
-     * Задаётся перетаскиванием в предпросмотре в приложении.
-     */
-    fun posX(ctx: Context): Float = prefs(ctx).getFloat(KEY_X, Float.NaN)
-    fun posY(ctx: Context): Float = prefs(ctx).getFloat(KEY_Y, Float.NaN)
-
-    fun setPosition(ctx: Context, x: Float, y: Float) {
-        prefs(ctx).edit().putFloat(KEY_X, x.coerceIn(0f, 1f)).putFloat(KEY_Y, y.coerceIn(0f, 1f)).apply()
+    /** Переносит одну наклейку из первой версии в список. */
+    private fun migrate(ctx: Context): List<StickerItem> {
+        val old = File(ctx.filesDir, "sticker.png")
+        if (!old.exists()) return emptyList()
+        val p = prefs(ctx)
+        val item = StickerItem(
+            "0",
+            p.getInt(OLD_SCALE, 40),
+            p.getInt(OLD_ROT, 0),
+            p.getFloat(OLD_X, Float.NaN),
+            p.getFloat(OLD_Y, Float.NaN),
+        )
+        old.renameTo(file(ctx, "0"))
+        saveItems(ctx, listOf(item))
+        return listOf(item)
     }
 
-    fun remove(ctx: Context) {
-        file(ctx).delete()
-        setOn(ctx, false)
-        source = null
-        cacheKey = null
-        cacheBmp = null
+    fun selected(ctx: Context): StickerItem? {
+        val list = items(ctx)
+        val id = prefs(ctx).getString(KEY_SEL, null)
+        return list.firstOrNull { it.id == id } ?: list.firstOrNull()
     }
 
-    /** Копирует выбранную картинку в память приложения. Возвращает false, если файл не картинка. */
-    fun importFrom(ctx: Context, uri: Uri): Boolean {
+    fun setSelected(ctx: Context, id: String) {
+        prefs(ctx).edit().putString(KEY_SEL, id).apply()
+    }
+
+    /** Добавляет картинку. Возвращает false, если это не картинка или достигнут лимит. */
+    fun add(ctx: Context, uri: Uri): Boolean {
+        val list = items(ctx)
+        if (list.size >= MAX_ITEMS) return false
+        val id = System.currentTimeMillis().toString()
+        val f = file(ctx, id)
         return try {
             ctx.contentResolver.openInputStream(uri)?.use { input ->
-                file(ctx).outputStream().use { input.copyTo(it) }
+                f.outputStream().use { input.copyTo(it) }
             }
-            val ok = decode(file(ctx)) != null
-            if (!ok) {
-                file(ctx).delete()
-                return false
+            if (decode(f) == null) {
+                f.delete()
+                false
+            } else {
+                // Новая наклейка появляется в центре: её видно сразу, а не в углу под другими.
+                saveItems(ctx, list + StickerItem(id, 40, 0, 0.5f, 0.5f))
+                setSelected(ctx, id)
+                setOn(ctx, true)
+                true
             }
-            source = null
-            cacheKey = null
-            setOn(ctx, true)
-            true
         } catch (e: Exception) {
-            file(ctx).delete()
+            f.delete()
             false
         }
+    }
+
+    fun update(ctx: Context, id: String, change: (StickerItem) -> StickerItem) {
+        saveItems(ctx, items(ctx).map { if (it.id == id) change(it) else it })
+    }
+
+    fun remove(ctx: Context, id: String) {
+        file(ctx, id).delete()
+        sources.remove(id)
+        val left = items(ctx).filter { it.id != id }
+        saveItems(ctx, left)
+        if (left.isEmpty()) setOn(ctx, false)
+        if (prefs(ctx).getString(KEY_SEL, null) == id) {
+            prefs(ctx).edit().remove(KEY_SEL).apply()
+        }
+        cacheKey = null
+        cacheBmp = null
     }
 
     private fun decode(f: File): Bitmap? {
@@ -108,45 +169,53 @@ object Sticker {
         return BitmapFactory.decodeFile(f.absolutePath, opts)
     }
 
-    private fun source(ctx: Context): Bitmap? {
-        val f = file(ctx)
+    private fun source(ctx: Context, id: String): Bitmap? {
+        val f = file(ctx, id)
         if (!f.exists()) return null
-        if (source == null || f.lastModified() != sourceStamp) {
-            source = decode(f)
-            sourceStamp = f.lastModified()
-        }
-        return source
+        val stamp = f.lastModified()
+        sources[id]?.let { (oldStamp, bmp) -> if (oldStamp == stamp) return bmp }
+        val b = decode(f) ?: return null
+        sources[id] = stamp to b
+        return b
     }
 
     /**
-     * Слой наклейки под текущие размер и поворот. Если наклейка выключена и force не задан,
-     * возвращает null. force нужен для предпросмотра в настройках.
+     * Слой всех наклеек размером w×h пикселей. Без force возвращает null, если наклейки выключены.
+     * force нужен для предпросмотра в настройках.
      */
-    fun layer(ctx: Context, force: Boolean = false): Bitmap? {
+    fun layer(ctx: Context, w: Int, h: Int, force: Boolean = false): Bitmap? {
         if (!force && !isOn(ctx)) return null
-        val src = source(ctx) ?: return null
-        val sc = scale(ctx)
-        val rot = rotation(ctx)
-        val px = posX(ctx)
-        val py = posY(ctx)
-        val key = "$sourceStamp:$sc:$rot:$px:$py"
-        if (key == cacheKey) return cacheBmp
+        val list = items(ctx)
+        if (list.isEmpty() || w <= 0 || h <= 0) return null
 
-        val out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
+        val sig = buildString {
+            append(w).append('x').append(h)
+            list.forEach {
+                append('|').append(it.id).append(':').append(it.scale).append(':').append(it.rot)
+                    .append(':').append(it.x).append(':').append(it.y)
+                    .append(':').append(file(ctx, it.id).lastModified())
+            }
+        }
+        if (sig == cacheKey) return cacheBmp
+
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
-        val hPx = H * sc / 100f
-        val wPx = hPx * src.width / src.height
-        // Центр наклейки: по умолчанию правый верхний угол, иначе место, которое выбрали пальцем.
-        val cx = if (px.isNaN()) W - MARGIN - wPx / 2f else px * W
-        val cy = if (py.isNaN()) MARGIN + hPx / 2f else py * H
-        canvas.save()
-        canvas.translate(cx, cy)
-        canvas.rotate(rot.toFloat())
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        canvas.drawBitmap(src, null, RectF(-wPx / 2f, -hPx / 2f, wPx / 2f, hPx / 2f), paint)
-        canvas.restore()
-
-        cacheKey = key
+        val margin = h * 0.045f
+        for (item in list) {
+            val src = source(ctx, item.id) ?: continue
+            val hPx = h * item.scale / 100f
+            val wPx = hPx * src.width / src.height
+            // Центр: по умолчанию правый верхний угол, иначе место, выбранное пальцем.
+            val cx = if (item.x.isNaN()) w - margin - wPx / 2f else item.x * w
+            val cy = if (item.y.isNaN()) margin + hPx / 2f else item.y * h
+            canvas.save()
+            canvas.translate(cx, cy)
+            canvas.rotate(item.rot.toFloat())
+            canvas.drawBitmap(src, null, RectF(-wPx / 2f, -hPx / 2f, wPx / 2f, hPx / 2f), paint)
+            canvas.restore()
+        }
+        cacheKey = sig
         cacheBmp = out
         return out
     }

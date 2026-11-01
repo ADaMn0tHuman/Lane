@@ -39,7 +39,6 @@ data class MediaState(
     val downloaded: Boolean = false,
     val appIcon: Bitmap? = null,
     val blurBg: Bitmap? = null,
-    val sticker: Bitmap? = null,
 )
 
 object MediaRepo {
@@ -372,7 +371,6 @@ object MediaRepo {
             downloadSupported = info.downloadSupported,
             downloaded = info.downloaded,
             appIcon = appIcon(ctx, c.packageName),
-            sticker = Sticker.layer(ctx),
             blurBg = if (ThemeStore.flag(ctx, ThemeStore.FLAG_BLUR) && coverBitmap != null) {
                 blurFrom(coverBitmap, cover.first ?: "")
             } else {

@@ -94,11 +94,13 @@
     <string name="sticker_title">Наклейка на большой виджет</string>
     <string name="sticker_on">Наклейка: включена</string>
     <string name="sticker_off">Наклейка: выключена</string>
-    <string name="sticker_pick">Выбрать картинку (PNG с прозрачным фоном)</string>
-    <string name="sticker_remove">Удалить наклейку</string>
+    <string name="sticker_pick">Добавить наклейку (PNG с прозрачным фоном)</string>
+    <string name="sticker_remove">Удалить выбранную наклейку</string>
     <string name="sticker_size">Размер: %1$d%%</string>
     <string name="sticker_rot">Поворот: %1$d°</string>
     <string name="sticker_none">Сначала выбери картинку</string>
     <string name="sticker_bad">Не удалось открыть картинку. Нужна PNG или WebP с прозрачным фоном</string>
     <string name="sticker_drag_hint">Перетаскивай наклейку пальцем по предпросмотру. На самом виджете двигать нельзя.</string>
+    <string name="sticker_item">Наклейка %1$d</string>
+    <string name="sticker_limit">Можно добавить до 5 наклеек</string>
 </resources>
