@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.media.session.MediaController
-import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -30,7 +29,6 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -83,18 +81,21 @@ class ControlAction : ActionCallback {
             "next" -> t.skipToNext()
             "like" -> like(context, c)
             else -> {
-                val willPlay = c.playbackState?.state != PlaybackState.STATE_PLAYING
+                val willPlay = !MediaRepo.isPlayingState(c.playbackState?.state)
                 MediaRepo.forcePlaying(willPlay)
                 if (willPlay) t.play() else t.pause()
             }
         }
 
-        // Обновляем сразу и ещё несколько раз, пока плеер успевает ответить.
-        val widget = LaneWidget()
-        widget.updateAll(context)
-        for (wait in longArrayOf(350, 700, 1000, 800)) {
-            delay(wait)
-            widget.updateAll(context)
+        // Одно мгновенное обновление, а дальше виджет обновят колбэки плеера (MediaListener).
+        // Ещё одно через секунду страхует случай, когда плеер не прислал колбэк.
+        WidgetUpdater.refresh(context)
+        delay(1000)
+        WidgetUpdater.refresh(context)
+        // Галочку «Нравится» нужно вернуть обратно в плюс, когда она погаснет.
+        if (parameters[CMD] == "like") {
+            delay(1400)
+            WidgetUpdater.refresh(context)
         }
     }
 

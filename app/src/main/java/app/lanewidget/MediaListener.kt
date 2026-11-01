@@ -8,7 +8,6 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,7 +41,7 @@ class MediaListener : NotificationListenerService() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = refresh()
 
         override fun onPlaybackStateChanged(state: PlaybackState?) {
-            if (state?.state == PlaybackState.STATE_PLAYING) {
+            if (MediaRepo.isPlayingState(state?.state)) {
                 MediaRepo.markActive(applicationContext, pkg)
             }
             refresh()
@@ -60,7 +59,7 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         release()
-        scope.launch { runCatching { LaneWidget().updateAll(applicationContext) } }
+        scope.launch { WidgetUpdater.refresh(applicationContext) }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -105,15 +104,16 @@ class MediaListener : NotificationListenerService() {
     private fun refresh() {
         pending?.cancel()
         pending = scope.launch {
-            delay(120)
-            runCatching { LaneWidget().updateAll(applicationContext) }
+            delay(50)
+            // Саму отрисовку запускаем отдельно, чтобы новое событие не отменяло её на полпути.
+            scope.launch { WidgetUpdater.refresh(applicationContext) }
             updateTick()
         }
     }
 
     private fun updateTick() {
         val c = MediaRepo.pick(this, MediaRepo.controllers(this))
-        val playing = c?.playbackState?.state == PlaybackState.STATE_PLAYING
+        val playing = MediaRepo.isPlayingState(c?.playbackState?.state)
         if (!playing) {
             tick?.cancel()
             tick = null
@@ -123,7 +123,7 @@ class MediaListener : NotificationListenerService() {
         tick = scope.launch {
             while (isActive) {
                 delay(10_000)
-                runCatching { LaneWidget().updateAll(applicationContext) }
+                WidgetUpdater.refresh(applicationContext)
             }
         }
     }

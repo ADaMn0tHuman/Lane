@@ -48,7 +48,24 @@ object MediaRepo {
 
     fun forcePlaying(value: Boolean) {
         forcedPlaying = value
-        forcedPlayingUntil = SystemClock.elapsedRealtime() + 1800
+        forcedPlayingUntil = SystemClock.elapsedRealtime() + 3000
+    }
+
+    /**
+     * «Плеер сейчас играет или вот-вот заиграет». Только STATE_PLAYING мало: при смене трека
+     * и подгрузке потока многие плееры на время сообщают BUFFERING / CONNECTING / SKIPPING_*,
+     * и иконка залипала на «треугольнике». Так же считает и системная шторка Android.
+     */
+    fun isPlayingState(state: Int?): Boolean = when (state) {
+        PlaybackState.STATE_PLAYING,
+        PlaybackState.STATE_BUFFERING,
+        PlaybackState.STATE_CONNECTING,
+        PlaybackState.STATE_FAST_FORWARDING,
+        PlaybackState.STATE_REWINDING,
+        PlaybackState.STATE_SKIPPING_TO_NEXT,
+        PlaybackState.STATE_SKIPPING_TO_PREVIOUS,
+        PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM -> true
+        else -> false
     }
 
     fun flashLiked() {
@@ -96,6 +113,10 @@ object MediaRepo {
         val playing = list.filter { it.playbackState?.state == PlaybackState.STATE_PLAYING }
         if (playing.isNotEmpty()) {
             return playing.firstOrNull { it.packageName == last } ?: playing.first()
+        }
+        val starting = list.filter { isPlayingState(it.playbackState?.state) }
+        if (starting.isNotEmpty()) {
+            return starting.firstOrNull { it.packageName == last } ?: starting.first()
         }
         return list.firstOrNull { it.packageName == last && it.metadata != null }
             ?: list.firstOrNull { it.metadata != null }
@@ -153,8 +174,16 @@ object MediaRepo {
             ?: ""
 
         val realPlaying = state?.state == PlaybackState.STATE_PLAYING
+        val intentPlaying = isPlayingState(state?.state)
         val forced = forcedPlaying
-        val playing = if (forced != null && now < forcedPlayingUntil) forced else realPlaying
+        val playing = when {
+            // Пока плеер не подтвердил нажатие, показываем то, чего хотел пользователь.
+            forced != null && now < forcedPlayingUntil && intentPlaying != forced -> forced
+            else -> {
+                if (forced != null) forcedPlaying = null
+                intentPlaying
+            }
+        }
 
         val duration = meta.getLong(MediaMetadata.METADATA_KEY_DURATION)
         var position = state?.position ?: 0L
