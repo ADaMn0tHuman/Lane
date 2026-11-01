@@ -26,27 +26,36 @@ import java.security.MessageDigest
  */
 object UpdateChecker {
 
-    private const val LATEST = "https://api.github.com/repos/ADaMn0tHuman/Lane/releases/latest"
+    private const val REPO = "https://github.com/ADaMn0tHuman/Lane"
     private val main = Handler(Looper.getMainLooper())
 
+    /**
+     * Проверка идёт через обычную страницу релизов, а не через API. У API GitHub лимит
+     * примерно 60 запросов в час с одного адреса, и он давал ошибку 403. Страница
+     * /releases/latest перенаправляет на /releases/tag/<тег>, из тега получаем номер сборки
+     * и имя APK (оно такое же, как в workflow: lane-widget-<номер>.apk).
+     */
     fun check(ctx: Context) {
         val app = ctx.applicationContext
         toast(app, app.getString(R.string.update_checking))
         Thread {
             try {
-                val conn = (URL(LATEST).openConnection() as HttpURLConnection).apply {
+                val probe = (URL("$REPO/releases/latest").openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
                     connectTimeout = 8000
                     readTimeout = 8000
-                    setRequestProperty("Accept", "application/vnd.github+json")
                     setRequestProperty("User-Agent", "LaneWidget")
                 }
-                if (conn.responseCode != 200) {
-                    toast(app, app.getString(R.string.update_error, "HTTP ${conn.responseCode}"))
+                val code = probe.responseCode
+                val finalUrl = probe.url.toString()
+                probe.disconnect()
+                if (code != 200 || !finalUrl.contains("/releases/tag/")) {
+                    toast(app, app.getString(R.string.update_error, "HTTP $code"))
                     return@Thread
                 }
-                val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
 
-                val remote = json.optString("tag_name").removePrefix("v").toLongOrNull() ?: 0L
+                val tag = finalUrl.substringAfterLast("/releases/tag/")
+                val remote = tag.removePrefix("v").toLongOrNull() ?: 0L
                 val local = PackageInfoCompat.getLongVersionCode(
                     app.packageManager.getPackageInfo(app.packageName, 0),
                 )
@@ -55,30 +64,24 @@ object UpdateChecker {
                     return@Thread
                 }
 
-                val assets = json.getJSONArray("assets")
-                var apkUrl: String? = null
-                for (i in 0 until assets.length()) {
-                    val a = assets.getJSONObject(i)
-                    if (a.optString("name").endsWith(".apk")) {
-                        apkUrl = a.getString("browser_download_url")
-                        break
-                    }
-                }
-                if (apkUrl == null) {
-                    toast(app, app.getString(R.string.update_no_apk))
-                    return@Thread
-                }
-
                 toast(app, app.getString(R.string.update_found))
+                val apkUrl = "$REPO/releases/download/$tag/lane-widget-$remote.apk"
                 val file = File(app.cacheDir, "update/lane-update.apk")
                 file.parentFile?.mkdirs()
-                (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                val dl = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                    instanceFollowRedirects = true
                     connectTimeout = 15000
                     readTimeout = 30000
-                    instanceFollowRedirects = true
-                }.inputStream.use { input ->
-                    file.outputStream().use { input.copyTo(it) }
+                    setRequestProperty("User-Agent", "LaneWidget")
                 }
+                if (dl.responseCode != 200) {
+                    toast(app, app.getString(R.string.update_no_apk))
+                    dl.disconnect()
+                    return@Thread
+                }
+                dl.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
+                dl.disconnect()
+
                 if (!signaturesMatch(app, file)) {
                     file.delete()
                     toast(app, app.getString(R.string.update_sig_mismatch))
