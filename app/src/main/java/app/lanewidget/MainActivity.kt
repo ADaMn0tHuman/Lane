@@ -282,6 +282,16 @@ class MainActivity : Activity() {
             label(getString(R.string.widget_bg_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
+        // Размытие фона: для обложки и для своего фото. 0 — резко.
+        if (ThemeStore.flag(this, ThemeStore.FLAG_BLUR) || Background.customOn(this)) {
+            palettesBox.addView(
+                slider({ getString(R.string.blur_value, it) }, 0, 100, Background.strength(this)) {
+                    Background.setInt(this, Background.KEY_BLUR, it)
+                    refreshWidgets()
+                },
+            )
+        }
+
         val transOn = Background.transparencyOn(this)
         palettesBox.addView(chip(getString(R.string.trans_on), transOn) {
             Background.setBool(this, Background.KEY_TRANS_ON, !transOn)
@@ -698,7 +708,7 @@ class MainActivity : Activity() {
             )
             return
         }
-        for (c in list.filter { !it.packageName.contains("youtube") }) {
+        for (c in list.filter { !it.packageName.contains("youtube") }.distinctBy { it.packageName }) {
             val hidden = Blocklist.isBlocked(this, c.packageName)
             val state = getString(if (hidden) R.string.player_hidden else R.string.player_shown)
             playersBox.addView(chip("${appLabel(c.packageName)}: $state", !hidden) {

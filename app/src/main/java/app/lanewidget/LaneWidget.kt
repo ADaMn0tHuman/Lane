@@ -215,9 +215,8 @@ private fun WidgetContent(s: MediaState) {
 
     // Фон: своё фото имеет приоритет, затем размытая обложка, затем цвет пака. Прозрачность общая.
     val alpha = Background.alpha(ctx)
-    val veil = Background.veil(ctx)
     val photo = Background.layer(ctx, pxW, pxH)
-    val blur = if (photo == null) s.blurBg?.let { Background.fitCover(it, pxW, pxH) } else null
+    val blur = if (photo == null) s.blurBg?.let { Background.coverLayer(ctx, it, pxW, pxH) } else null
     val hasImage = photo != null || blur != null
     val cardColor = if (hasImage) Color.Transparent
         else Color(Background.withAlphaArgb(Palette.cardArgb, alpha))
@@ -248,15 +247,6 @@ private fun WidgetContent(s: MediaState) {
                 modifier = GlanceModifier.fillMaxSize().cornerRadius(30.dp),
                 contentScale = ContentScale.FillBounds,
             )
-        }
-        // Помутнение поверх фото или обложки: 0 — фото без затемнения.
-        if (hasImage && veil > 0) {
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxSize()
-                    .background(ColorProvider(Color(Background.withAlphaArgb(Palette.cardArgb, veil))))
-                    .cornerRadius(30.dp),
-            ) {}
         }
         Row(
             modifier = GlanceModifier

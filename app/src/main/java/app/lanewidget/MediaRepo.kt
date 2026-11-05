@@ -253,21 +253,8 @@ object MediaRepo {
     }
 
     /** Размытая обложка: уменьшаем до 12 px, растягиваем обратно и затемняем, чтобы читался текст. */
-    private fun blurFrom(cover: Bitmap, key: String): Bitmap {
-        if (key == blurKey) blurBitmap?.let { return it }
-        // Несколько ступеней уменьшения и увеличения: так размытие получается мягким, без квадратиков.
-        // Уменьшаем до 48×48, несколько раз размываем коробчатым фильтром и растягиваем.
-        // Поэтому квадратиков почти нет: на маленькой сетке размытие уже мягкое.
-        val n = 48
-        val px = IntArray(n * n)
-        Bitmap.createScaledBitmap(cover, n, n, true).getPixels(px, 0, n, 0, 0, n, n)
-        repeat(3) { boxBlur(px, n, 3) }
-        val small = Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888)
-        val big = Bitmap.createScaledBitmap(small, 320, 320, true)
-        blurKey = key
-        blurBitmap = big
-        return big
-    }
+    /** Обложка без обработки: размытие и обрезку делает Background под размер виджета. */
+    private fun blurFrom(cover: Bitmap, @Suppress("UNUSED_PARAMETER") key: String): Bitmap = cover
 
     /** Коробчатое размытие по строкам и столбцам. */
     private fun boxBlur(px: IntArray, n: Int, r: Int) {

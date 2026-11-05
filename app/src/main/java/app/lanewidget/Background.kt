@@ -21,11 +21,14 @@ object Background {
     const val KEY_ZOOM = "bg_zoom"        // приближение 100..300 %
     const val KEY_DX = "bg_dx"            // сдвиг -50..50 % ширины
     const val KEY_DY = "bg_dy"            // сдвиг -50..50 % высоты
+    const val KEY_BLUR = "bg_blur"        // размытие фона 0..100, 0 — резко
 
     private var src: Bitmap? = null
     private var srcStamp = 0L
     private var cacheKey: String? = null
     private var cacheBmp: Bitmap? = null
+    private var coverKeyStr = ""
+    private var coverOut: Bitmap? = null
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun file(ctx: Context) = File(ctx.filesDir, "bg_custom.png")
@@ -46,12 +49,23 @@ object Background {
         prefs(ctx).edit().putInt(key, value).apply()
     }
 
-    /** Помутнение фона 0..255. 0 — фото без затемнения. Накладывается поверх фото или обложки. */
-    fun veil(ctx: Context): Int =
-        if (transparencyOn(ctx)) (255 * transparency(ctx) / 100).coerceIn(0, 255) else 0
+    /** Непрозрачность сплошного цвета пака. Используется, только если фона из обложки или фото нет. */
+    fun alpha(ctx: Context): Int =
+        if (transparencyOn(ctx)) (255 * (100 - transparency(ctx)) / 100).coerceIn(0, 255) else 255
 
-    /** Непрозрачность сплошной карточки пака: при помутнении она чуть прозрачнее. */
-    fun alpha(ctx: Context): Int = 255 - veil(ctx)
+    /** Сила размытия фона 0..100. 0 — картинка резкая. */
+    fun strength(ctx: Context): Int = prefs(ctx).getInt(KEY_BLUR, 30)
+
+    /** Фон из обложки с размытием. Пересчитывается только при изменении обложки или настроек. */
+    fun coverLayer(ctx: Context, src: Bitmap, w: Int, h: Int): Bitmap {
+        val st = strength(ctx)
+        val key = "${System.identityHashCode(src)}:$w:$h:$st"
+        coverOut?.let { if (key == coverKeyStr) return it }
+        val out = Blur.soften(fitCover(src, w, h), st)
+        coverKeyStr = key
+        coverOut = out
+        return out
+    }
 
     fun withAlphaArgb(argb: Int, alpha: Int): Int = (alpha shl 24) or (argb and 0xFFFFFF)
 
@@ -113,7 +127,7 @@ object Background {
         if (!force && !customOn(ctx)) return null
         val s = source(ctx) ?: return null
         if (w <= 0 || h <= 0) return null
-        val key = "$srcStamp:$w:$h:${zoom(ctx)}:${dx(ctx)}:${dy(ctx)}"
+        val key = "$srcStamp:$w:$h:${zoom(ctx)}:${dx(ctx)}:${dy(ctx)}:${strength(ctx)}"
         if (key == cacheKey) return cacheBmp
 
         val scale = maxOf(w.toFloat() / s.width, h.toFloat() / s.height) * zoom(ctx) / 100f
@@ -128,9 +142,10 @@ object Background {
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         Canvas(out).drawBitmap(s, null, RectF(left, top, left + dw, top + dh), paint)
+        val result = Blur.soften(out, strength(ctx))
         cacheKey = key
-        cacheBmp = out
-        return out
+        cacheBmp = result
+        return result
     }
 
     /** Заполняет область w×h размытым фоном с обрезкой по краям, без растяжения. */
