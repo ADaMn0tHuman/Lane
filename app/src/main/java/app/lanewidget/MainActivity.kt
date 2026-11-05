@@ -1,6 +1,7 @@
 package app.lanewidget
 
 import android.Manifest
+import android.app.AlertDialog
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -80,19 +81,9 @@ class MainActivity : Activity() {
 
         content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
 
+        // Группа: работа в фоне
         content.addView(
-            pillButton(getString(R.string.update_button)) { UpdateChecker.check(this) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
-        )
-        content.addView(
-            pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(24) },
-        )
-
-
-        // Чтобы виджет не засыпал
-        content.addView(
-            label(getString(R.string.bg_title), 20f, Palette.text.toArgb(), bold = true)
+            label(getString(R.string.group_bg), 20f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(32), 0, dp(6)) },
         )
         content.addView(label(getString(R.string.bg_hint), 14f, Palette.dim.toArgb()))
@@ -111,16 +102,15 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(10) },
         )
 
-        // Цветовые паки
+        // Группа: внешний вид. Подгруппы строятся в renderPalettes.
         content.addView(
-            label(getString(R.string.theme_title), 20f, Palette.text.toArgb(), bold = true)
+            label(getString(R.string.group_look), 20f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(32), 0, dp(6)) },
         )
-        content.addView(label(getString(R.string.theme_hint), 14f, Palette.dim.toArgb()))
         palettesBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(palettesBox)
 
-        // Какие плееры показывать
+        // Группа: плееры
         content.addView(
             label(getString(R.string.players_title), 20f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(32), 0, dp(6)) },
@@ -128,6 +118,54 @@ class MainActivity : Activity() {
         content.addView(label(getString(R.string.players_hint), 14f, Palette.dim.toArgb()))
         playersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(playersBox)
+
+        // Группа: энергия, обновления, настройки
+        content.addView(
+            label(getString(R.string.group_misc), 20f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(32), 0, dp(6)) },
+        )
+        val misc = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        misc.addView(
+            label(getString(R.string.misc_energy), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(4), 0, dp(4)) },
+        )
+        val slowOn = WP.flag(this, WP.SLOW, false)
+        misc.addView(chip(getString(R.string.slow_chip), slowOn) {
+            WP.setFlag(this, WP.SLOW, !slowOn)
+            recreate()
+        })
+        misc.addView(
+            label(getString(R.string.misc_update), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.update_button)) { UpdateChecker.check(this) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(8) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.diag_button)) { startActivity(Intent(this, DiagnosticsActivity::class.java)) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(8) },
+        )
+        // Экспорт и импорт всех настроек
+        misc.addView(
+            label(getString(R.string.settings_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.settings_export)) { createFile(reqExport, "lane-widget-settings.json") },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.settings_import)) { openJson(reqImport) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+
+        misc.addView(
+            pillButton(getString(R.string.reset_button)) { confirmReset() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) },
+        )
+        makeCollapsible(misc)
+        content.addView(misc)
 
         makeCollapsible(content)
         val scroll = ScrollView(this).apply {
@@ -212,6 +250,10 @@ class MainActivity : Activity() {
     /** Список паков, кнопка удаления своего пака и форма создания нового. */
     private fun renderPalettes() {
         palettesBox.removeAllViews()
+        palettesBox.addView(
+            label(getString(R.string.theme_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(4), 0, dp(4)) },
+        )
         val active = ThemeStore.active(this)
         for (p in ThemeStore.all(this)) {
             val isOn = p.name == active.name
@@ -277,11 +319,24 @@ class MainActivity : Activity() {
             })
         }
 
+        // Полоска и время
+        palettesBox.addView(
+            label(getString(R.string.time_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        val remaining = WP.flag(this, WP.REMAINING, false)
+        palettesBox.addView(chip(getString(R.string.time_remaining), remaining) {
+            WP.setFlag(this, WP.REMAINING, !remaining)
+            refreshWidgets()
+            renderPalettes()
+        })
+
         // Фон: прозрачность и своё фото 4 на 2
         palettesBox.addView(
             label(getString(R.string.widget_bg_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
+        palettesBox.addView(label(getString(R.string.bg_shared_hint), 13f, Palette.dim.toArgb()))
         // Размытие фона: для обложки и для своего фото. 0 — резко.
         if (ThemeStore.flag(this, ThemeStore.FLAG_BLUR) || Background.customOn(this)) {
             palettesBox.addView(
@@ -355,20 +410,6 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
             )
         }
-
-        // Экспорт и импорт всех настроек
-        palettesBox.addView(
-            label(getString(R.string.settings_title), 16f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(18), 0, dp(4)) },
-        )
-        palettesBox.addView(
-            pillButton(getString(R.string.settings_export)) { createFile(reqExport, "lane-widget-settings.json") },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
-        )
-        palettesBox.addView(
-            pillButton(getString(R.string.settings_import)) { openJson(reqImport) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
-        )
 
         palettesBox.addView(
             label(getString(R.string.preview_title), 16f, Palette.text.toArgb(), bold = true)
@@ -492,6 +533,7 @@ class MainActivity : Activity() {
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
         )
+        makeCollapsible(palettesBox)
     }
 
     /**
@@ -504,7 +546,7 @@ class MainActivity : Activity() {
         root.removeAllViews()
         var body: LinearLayout? = null
         for (v in views) {
-            if (v is TextView && v.tag == headerTag) {
+            if (v is TextView && (v.tag == "h1" || v.tag == "h2")) {
                 val title = v.text.toString()
                 val key = "fold_$title"
                 val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -608,6 +650,23 @@ class MainActivity : Activity() {
                 toastMsg(R.string.settings_failed)
             }
         }
+    }
+
+    private fun confirmReset() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.reset_title)
+            .setMessage(R.string.reset_message)
+            .setPositiveButton(R.string.reset_button) { _, _ -> resetAll() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun resetAll() {
+        getSharedPreferences("lane_widget", MODE_PRIVATE).edit().clear().commit()
+        Background.removeCustom(this)
+        refreshWidgets()
+        toastMsg(R.string.reset_done)
+        recreate()
     }
 
     private fun refreshWidgets() {
@@ -793,7 +852,11 @@ class MainActivity : Activity() {
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
         this.text = text
-        if (sp == 20f) tag = headerTag
+        tag = when {
+            sp == 20f -> "h1"
+            sp == 16f && bold -> "h2"
+            else -> null
+        }
         setTextSize(TypedValue.COMPLEX_UNIT_SP, sp)
         setTextColor(color)
         if (bold) typeface = Typeface.DEFAULT_BOLD

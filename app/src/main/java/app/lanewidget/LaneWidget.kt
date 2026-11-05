@@ -202,7 +202,7 @@ internal fun openIntent(s: MediaState): Intent? {
 }
 
 /** Обрезает текст многоточием, если он не вмещается. Ширина приблизительная, по размеру виджета. */
-private fun fit(text: String, max: Int): String =
+internal fun fit(text: String, max: Int): String =
     if (text.length <= max) text else text.take(max - 1).trimEnd() + "…"
 
 @Composable
@@ -267,7 +267,7 @@ private fun WidgetContent(s: MediaState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = fit(s.title, titleMax),
+                    text = fit(if (s.hasAccess) s.title else ctx.getString(R.string.widget_need_access), titleMax),
                     maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(Palette.text),
@@ -276,7 +276,7 @@ private fun WidgetContent(s: MediaState) {
                     ),
                 )
                 Text(
-                    text = fit(s.artist, artistMax),
+                    text = fit(if (s.hasAccess) s.artist else ctx.getString(R.string.widget_need_access_hint), artistMax),
                     maxLines = 1,
                     style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
                 )
@@ -337,7 +337,12 @@ internal fun Cover(s: MediaState, size: Dp, radius: Dp) {
 private fun ProgressRow(s: MediaState) {
     val timeWidth = if (s.durationMs >= 3_600_000L) 46.dp else 34.dp
     val elapsed = MediaRepo.formatTime(s.positionMs)
-    val total = if (s.durationMs > 0) MediaRepo.formatTime(s.durationMs) else "--:--"
+    val ctx = LocalContext.current
+    val total = when {
+        s.durationMs <= 0 -> "--:--"
+        WP.flag(ctx, WP.REMAINING, false) -> "-" + MediaRepo.formatTime(s.durationMs - s.positionMs)
+        else -> MediaRepo.formatTime(s.durationMs)
+    }
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,

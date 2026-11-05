@@ -142,4 +142,19 @@
     <string name="glass_bar">Прозрачная полоска</string>
     <string name="glass_cover">Обложка в стеклянной рамке</string>
     <string name="blur_value">Размытие: %1$d%%</string>
+    <string name="group_bg">Работа в фоне</string>
+    <string name="group_look">Внешний вид</string>
+    <string name="group_misc">Энергия и обновления</string>
+    <string name="misc_energy">Экономия батареи</string>
+    <string name="misc_update">Обновления и диагностика</string>
+    <string name="slow_chip">Полоска раз в 2 секунды (экономнее)</string>
+    <string name="time_title">Полоска и время</string>
+    <string name="time_remaining">Показывать оставшееся время</string>
+    <string name="bg_shared_hint">Фон и размытие общие для большого и компактного виджета.</string>
+    <string name="reset_button">Сбросить все настройки</string>
+    <string name="reset_title">Сбросить настройки?</string>
+    <string name="reset_message">Пакеты, переключатели и фото будут удалены. Это нельзя отменить.</string>
+    <string name="reset_done">Настройки сброшены</string>
+    <string name="widget_need_access">Выдай доступ к уведомлениям</string>
+    <string name="widget_need_access_hint">Нажми, чтобы открыть настройки</string>
 </resources>

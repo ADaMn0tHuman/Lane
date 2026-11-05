@@ -190,7 +190,7 @@ class MediaListener : NotificationListenerService() {
         if (tick?.isActive == true) return
         tick = scope.launch {
             while (isActive) {
-                delay(TICK_MS)
+                delay(if (WP.flag(applicationContext, WP.SLOW, false)) 2000L else TICK_MS)
                 // Экран погас: таймер не нужен. При включении экрана его запустит приёмник выше.
                 if (!interactive()) break
                 WidgetUpdater.refresh(applicationContext)

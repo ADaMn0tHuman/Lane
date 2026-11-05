@@ -12,11 +12,20 @@ object WP {
     const val SWITCH = "show_switch"
     const val PREV = "show_prev"
     const val NEXT = "show_next"
+    const val REMAINING = "time_remaining"
+    const val SLOW = "slow_tick"
 
     fun shown(ctx: Context, key: String): Boolean =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key, true)
 
     fun setShown(ctx: Context, key: String, value: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
+    }
+
+    fun flag(ctx: Context, key: String, default: Boolean): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key, default)
+
+    fun setFlag(ctx: Context, key: String, value: Boolean) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(key, value).apply()
     }
 }

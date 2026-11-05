@@ -3,12 +3,14 @@ package app.lanewidget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
@@ -27,13 +29,15 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 
-/** Компактный виджет 4×1: обложка с значком плеера, название, исполнитель, полоска и play. */
+/**
+ * Компактный виджет 4×1: обложка, название, исполнитель, полоска и play.
+ * Фон (обложка, размытие, своё фото, прозрачность) общий с большим виджетом.
+ */
 class LaneCompactWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Single
@@ -55,21 +59,39 @@ class LaneCompactWidgetReceiver : GlanceAppWidgetReceiver() {
 
 @Composable
 private fun CompactContent(s: MediaState) {
+    val ctx = LocalContext.current
     val launch = openIntent(s)
+
+    // Фон готовится под фиксированный размер 4×1. Картинка обрезается по краям (Crop), не растягивается.
+    val pxW = 1000
+    val pxH = 250
+    val photo = Background.layer(ctx, pxW, pxH)
+    val cover = if (photo == null) s.blurBg?.let { Background.coverLayer(ctx, it, pxW, pxH) } else null
+    val hasImage = photo != null || cover != null
+    val card = if (hasImage) Color.Transparent
+        else Color(Background.withAlphaArgb(Palette.cardArgb, Background.alpha(ctx)))
+
+    val title = if (s.hasAccess) s.title else ctx.getString(R.string.widget_need_access)
+    val artist = if (s.hasAccess) s.artist else ctx.getString(R.string.widget_need_access_hint)
 
     val root = GlanceModifier
         .fillMaxSize()
-        .background(ColorProvider(Palette.card))
+        .background(ColorProvider(card))
         .cornerRadius(26.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
-    val unit = 48.dp
-
     Box(modifier = root) {
-        val blur = s.blurBg
-        if (blur != null) {
+        photo?.let {
             Image(
-                provider = ImageProvider(blur),
+                provider = ImageProvider(it),
+                contentDescription = null,
+                modifier = GlanceModifier.fillMaxSize().cornerRadius(26.dp),
+                contentScale = ContentScale.Crop,
+            )
+        }
+        cover?.let {
+            Image(
+                provider = ImageProvider(it),
                 contentDescription = null,
                 modifier = GlanceModifier.fillMaxSize().cornerRadius(26.dp),
                 contentScale = ContentScale.Crop,
@@ -79,13 +101,13 @@ private fun CompactContent(s: MediaState) {
             modifier = GlanceModifier.fillMaxSize().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cover(s, unit, 14.dp)
+            Cover(s, 48.dp, 14.dp)
             Column(
                 modifier = GlanceModifier.defaultWeight().padding(start = 10.dp, end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = s.title,
+                    text = fit(title, 22),
                     maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(Palette.text),
@@ -94,7 +116,7 @@ private fun CompactContent(s: MediaState) {
                     ),
                 )
                 Text(
-                    text = s.artist,
+                    text = fit(artist, 26),
                     maxLines = 1,
                     style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 12.sp),
                 )
