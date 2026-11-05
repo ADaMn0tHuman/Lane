@@ -114,8 +114,8 @@
     <string name="btn_prev">Назад</string>
     <string name="btn_next">Вперёд</string>
     <string name="widget_bg_title">Фон виджета</string>
-    <string name="trans_on">Прозрачность фона</string>
-    <string name="trans_value">Прозрачность: %1$d%%</string>
+    <string name="trans_on">Помутнение фона</string>
+    <string name="trans_value">Помутнение: %1$d%%</string>
     <string name="photo_on">Своё фото на фон: включено</string>
     <string name="photo_off">Своё фото на фон: выключено</string>
     <string name="photo_pick">Выбрать фото (любое, лучше горизонтальное)</string>

@@ -103,7 +103,6 @@ object ThemeStore {
     /** Загружает активный пак в Palette. Вызывается перед отрисовкой экранов и виджета. */
     fun apply(ctx: Context) {
         Palette.load(active(ctx))
-        Glass.apply(ctx)
     }
 
     /** Возвращает код ошибки («name» или «builtin») либо null, если всё сохранено. */

@@ -214,9 +214,10 @@ private fun WidgetContent(s: MediaState) {
     val pxH = if (size.height.value < 10f) 408 else (size.height.value * 3).toInt().coerceAtMost(1080)
 
     // Фон: своё фото имеет приоритет, затем размытая обложка, затем цвет пака. Прозрачность общая.
-    val alpha = Glass.bgAlpha(ctx, Background.alpha(ctx))
+    val alpha = Background.alpha(ctx)
+    val veil = Background.veil(ctx)
     val photo = Background.layer(ctx, pxW, pxH)
-    val blur = if (photo == null) s.blurBg?.let { Background.withAlpha(it, pxW, pxH, alpha) } else null
+    val blur = if (photo == null) s.blurBg?.let { Background.fitCover(it, pxW, pxH) } else null
     val hasImage = photo != null || blur != null
     val cardColor = if (hasImage) Color.Transparent
         else Color(Background.withAlphaArgb(Palette.cardArgb, alpha))
@@ -248,6 +249,15 @@ private fun WidgetContent(s: MediaState) {
                 contentScale = ContentScale.FillBounds,
             )
         }
+        // Помутнение поверх фото или обложки: 0 — фото без затемнения.
+        if (hasImage && veil > 0) {
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .background(ColorProvider(Color(Background.withAlphaArgb(Palette.cardArgb, veil))))
+                    .cornerRadius(30.dp),
+            ) {}
+        }
         Row(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -256,20 +266,7 @@ private fun WidgetContent(s: MediaState) {
         ) {
             // Обложка 92 dp. Текст начинается на расстоянии 12 + 92 + 6 = 110 dp от края.
             Column(horizontalAlignment = Alignment.Start) {
-                if (Palette.glassCover) {
-                    // Обложка в полупрозрачной рамке-стекле. Общий размер остаётся 92 dp.
-                    Box(
-                        modifier = GlanceModifier
-                            .size(92.dp)
-                            .background(ColorProvider(Color(0x40FFFFFF)))
-                            .cornerRadius(24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Cover(s, 84.dp, 18.dp)
-                    }
-                } else {
-                    Cover(s, 92.dp, 20.dp)
-                }
+                Cover(s, 92.dp, 20.dp)
                 if (WP.shown(ctx, WP.SWITCH) && s.appIcon != null) {
                     Spacer(modifier = GlanceModifier.height(4.dp))
                     AppBadge(s, 32.dp)
@@ -451,14 +448,11 @@ internal fun PlayButton(playing: Boolean, size: Dp) {
     Box(
         modifier = GlanceModifier
             .size(size)
-            .background(ColorProvider(if (Palette.glassBtn) Palette.pinkGlass else Palette.pink))
+            .background(ColorProvider(Palette.pink))
             .cornerRadius(size / 2)
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "toggle"))),
         contentAlignment = Alignment.Center,
     ) {
-        if (Palette.glassBtn) {
-            Image(provider = ImageProvider(R.drawable.bubble), contentDescription = null, modifier = GlanceModifier.fillMaxSize())
-        }
         Image(
             provider = ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
             contentDescription = null,
@@ -476,9 +470,6 @@ private fun SideButton(res: Int, cmd: String, tint: Color) {
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to cmd))),
         contentAlignment = Alignment.Center,
     ) {
-        if (Palette.glassBtn) {
-            Image(provider = ImageProvider(R.drawable.bubble), contentDescription = null, modifier = GlanceModifier.fillMaxSize())
-        }
         Image(
             provider = ImageProvider(res),
             contentDescription = null,
@@ -498,9 +489,6 @@ private fun MiniButton(res: Int, cmd: String, tint: Color) {
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to cmd))),
         contentAlignment = Alignment.Center,
     ) {
-        if (Palette.glassBtn) {
-            Image(provider = ImageProvider(R.drawable.bubble), contentDescription = null, modifier = GlanceModifier.size(26.dp))
-        }
         Image(
             provider = ImageProvider(res),
             contentDescription = null,

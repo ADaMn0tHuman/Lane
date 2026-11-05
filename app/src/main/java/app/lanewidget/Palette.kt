@@ -12,18 +12,6 @@ object Palette {
     private var _text = 0xFFF2F2F2.toInt()
     private var _dot: Int? = null
     private var _override: Int? = null
-    private var _glassBtn = false
-    private var _glassBar = false
-    private var _glassCover = false
-
-    fun setGlass(btn: Boolean, bar: Boolean, cover: Boolean) {
-        _glassBtn = btn
-        _glassBar = bar
-        _glassCover = cover
-    }
-
-    val glassBtn: Boolean get() = _glassBtn
-    val glassCover: Boolean get() = _glassCover
 
     fun load(p: Pack) {
         _bg = android.graphics.Color.parseColor(p.bg)
@@ -60,9 +48,7 @@ object Palette {
     val cardArgb: Int get() = _bg
     val screenBg: Color get() = Color(_bg)
     val cover: Color get() = Color(mix(_bg, _text, 0.07f))
-    val track: Color get() = if (_glassBar) Color((0x40 shl 24) or (_text and 0xFFFFFF))
-        else Color(mix(_bg, _text, 0.2f))
-    val pinkGlass: Color get() = Color((0x9A shl 24) or (accentInt and 0xFFFFFF))
+    val track: Color get() = Color(mix(_bg, _text, 0.2f))
     val muted: Color get() = Color(mix(_text, _bg, 0.7f))
     val dim: Color get() = Color(mix(_text, _bg, 0.45f))
     val text: Color get() = Color(_text)

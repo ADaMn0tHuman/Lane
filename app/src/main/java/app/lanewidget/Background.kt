@@ -31,7 +31,7 @@ object Background {
     private fun file(ctx: Context) = File(ctx.filesDir, "bg_custom.png")
 
     fun transparencyOn(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_TRANS_ON, false)
-    fun transparency(ctx: Context): Int = prefs(ctx).getInt(KEY_TRANS, 30)
+    fun transparency(ctx: Context): Int = prefs(ctx).getInt(KEY_TRANS, 50)
     fun zoom(ctx: Context): Int = prefs(ctx).getInt(KEY_ZOOM, 100)
     fun dx(ctx: Context): Int = prefs(ctx).getInt(KEY_DX, 0)
     fun dy(ctx: Context): Int = prefs(ctx).getInt(KEY_DY, 0)
@@ -46,9 +46,12 @@ object Background {
         prefs(ctx).edit().putInt(key, value).apply()
     }
 
-    /** Альфа-канал фона: 255 без прозрачности, меньше — прозрачнее. */
-    fun alpha(ctx: Context): Int =
-        if (transparencyOn(ctx)) (255 * (100 - transparency(ctx)) / 100).coerceIn(0, 255) else 255
+    /** Помутнение фона 0..255. 0 — фото без затемнения. Накладывается поверх фото или обложки. */
+    fun veil(ctx: Context): Int =
+        if (transparencyOn(ctx)) (255 * transparency(ctx) / 100).coerceIn(0, 255) else 0
+
+    /** Непрозрачность сплошной карточки пака: при помутнении она чуть прозрачнее. */
+    fun alpha(ctx: Context): Int = 255 - veil(ctx)
 
     fun withAlphaArgb(argb: Int, alpha: Int): Int = (alpha shl 24) or (argb and 0xFFFFFF)
 
@@ -110,8 +113,7 @@ object Background {
         if (!force && !customOn(ctx)) return null
         val s = source(ctx) ?: return null
         if (w <= 0 || h <= 0) return null
-        val a = alpha(ctx)
-        val key = "$srcStamp:$w:$h:${zoom(ctx)}:${dx(ctx)}:${dy(ctx)}:$a"
+        val key = "$srcStamp:$w:$h:${zoom(ctx)}:${dx(ctx)}:${dy(ctx)}"
         if (key == cacheKey) return cacheBmp
 
         val scale = maxOf(w.toFloat() / s.width, h.toFloat() / s.height) * zoom(ctx) / 100f
@@ -125,19 +127,21 @@ object Background {
 
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        paint.alpha = a
         Canvas(out).drawBitmap(s, null, RectF(left, top, left + dw, top + dh), paint)
         cacheKey = key
         cacheBmp = out
         return out
     }
 
-    /** Растягивает готовый фон (например, размытую обложку) под размер виджета с учётом прозрачности. */
-    fun withAlpha(src: Bitmap, w: Int, h: Int, alpha: Int): Bitmap {
+    /** Заполняет область w×h размытым фоном с обрезкой по краям, без растяжения. */
+    fun fitCover(src: Bitmap, w: Int, h: Int): Bitmap {
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val paint = Paint(Paint.FILTER_BITMAP_FLAG)
-        paint.alpha = alpha
-        Canvas(out).drawBitmap(src, null, RectF(0f, 0f, w.toFloat(), h.toFloat()), paint)
+        val scale = maxOf(w.toFloat() / src.width, h.toFloat() / src.height)
+        val dw = src.width * scale
+        val dh = src.height * scale
+        val left = (w - dw) / 2f
+        val top = (h - dh) / 2f
+        Canvas(out).drawBitmap(src, null, RectF(left, top, left + dw, top + dh), Paint(Paint.FILTER_BITMAP_FLAG))
         return out
     }
 }

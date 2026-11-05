@@ -253,40 +253,6 @@ class MainActivity : Activity() {
             )
         }
 
-        // Стиль виджета: классический или стекло
-        palettesBox.addView(
-            label(getString(R.string.style_title), 16f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(18), 0, dp(4)) },
-        )
-        val glassOn = Glass.enabled(this)
-        palettesBox.addView(chip(getString(R.string.style_classic), !glassOn) {
-            Glass.setEnabled(this, false)
-            refreshWidgets()
-            renderPalettes()
-        })
-        palettesBox.addView(chip(getString(R.string.style_glass), glassOn) {
-            Glass.setEnabled(this, true)
-            refreshWidgets()
-            renderPalettes()
-        })
-        if (glassOn) {
-            palettesBox.addView(label(getString(R.string.glass_hint), 13f, Palette.dim.toArgb()))
-            val glassKeys = listOf(
-                Glass.BUTTONS to R.string.glass_buttons,
-                Glass.BG to R.string.glass_bg,
-                Glass.BAR to R.string.glass_bar,
-                Glass.COVER to R.string.glass_cover,
-            )
-            for ((key, res) in glassKeys) {
-                val on = Glass.on(this, key)
-                palettesBox.addView(chip(getString(res), on) {
-                    Glass.setOn(this, key, !on)
-                    refreshWidgets()
-                    renderPalettes()
-                })
-            }
-        }
-
         // Кнопки виджета: каждую можно скрыть. По умолчанию все включены.
         palettesBox.addView(
             label(getString(R.string.buttons_title), 16f, Palette.text.toArgb(), bold = true)

@@ -264,7 +264,6 @@ object MediaRepo {
         repeat(3) { boxBlur(px, n, 3) }
         val small = Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888)
         val big = Bitmap.createScaledBitmap(small, 320, 320, true)
-        Canvas(big).drawColor(0x8C000000.toInt())
         blurKey = key
         blurBitmap = big
         return big
