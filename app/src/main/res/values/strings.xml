@@ -164,4 +164,11 @@
     <string name="auto_btn_on">Подбирать цвет из обложки: включено</string>
     <string name="auto_btn_off">Подбирать цвет из обложки: выключено</string>
     <string name="auto_btn_hint">Ручной цвет не применяется, пока включён автоподбор. Цвет подбирается под фон, на котором стоят кнопки.</string>
+    <string name="color_modes_title">Цвет режимов</string>
+    <string name="color_modes_hint">Цвет перемешивания и цикла для каждого состояния. При автоподборе не применяется.</string>
+    <string name="mode_shuffle_on">Перемешать: вкл</string>
+    <string name="mode_shuffle_off">Перемешать: выкл</string>
+    <string name="mode_repeat_off">Цикл: выкл</string>
+    <string name="mode_repeat_all">Цикл: весь список</string>
+    <string name="mode_repeat_one">Цикл: один трек</string>
 </resources>

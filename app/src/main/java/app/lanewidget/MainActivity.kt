@@ -319,10 +319,10 @@ class MainActivity : Activity() {
             })
         }
 
-        // Цвет каждой кнопки (значок приложения не меняем)
+        // Цвет кнопки: одна подгруппа на все кнопки (значок приложения не меняем)
         palettesBox.addView(
-            label(getString(R.string.btn_color_title), 13f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(12), 0, dp(4)) },
+            label(getString(R.string.btn_color_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
         val autoOn = WP.flag(this, WP.AUTO_BTN, false)
         palettesBox.addView(chip(if (autoOn) getString(R.string.auto_btn_on) else getString(R.string.auto_btn_off), autoOn) {
@@ -333,7 +333,7 @@ class MainActivity : Activity() {
         if (autoOn) {
             palettesBox.addView(label(getString(R.string.auto_btn_hint), 13f, Palette.dim.toArgb()))
         }
-        val colorNames = listOf(
+        val buttonNames = listOf(
             "prev" to R.string.btn_prev,
             "like" to R.string.btn_like,
             "next" to R.string.btn_next,
@@ -342,55 +342,28 @@ class MainActivity : Activity() {
             "download" to R.string.btn_download,
             "toggle" to R.string.btn_play,
         )
-        for ((name, res) in colorNames) {
-            palettesBox.addView(chip(getString(res), name == colorPick) {
-                colorPick = name
-                renderPalettes()
-            })
+        addColorEditor(buttonNames, colorPick) {
+            colorPick = it
+            renderPalettes()
         }
-        val picked = colorPick
-        val hex = EditText(this).apply {
-            setText(WP.color(this@MainActivity, picked)?.let { String.format("#%06X", it and 0xFFFFFF) } ?: "")
-            hint = "#RRGGBB"
-            setTextColor(Palette.text.toArgb())
-            setHintTextColor(Palette.dim.toArgb())
-            setBackgroundColor(Palette.track.toArgb())
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            setSingleLine()
-        }
-        palettesBox.addView(hex, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
-        val swatches = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (h in listOf("#FFFFFF", "#000000", "#F4A9C0", "#7FD1AE", "#8AB4F8", "#FFD166", "#FF7A7A")) {
-            swatches.addView(
-                View(this).apply {
-                    background = shape(android.graphics.Color.parseColor(h), dp(14))
-                    setOnClickListener { hex.setText(h) }
-                },
-                LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = dp(8) },
-            )
-        }
-        palettesBox.addView(swatches, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+
+        // Цвет режимов: перемешать и цикл, у каждого состояния свой цвет
         palettesBox.addView(
-            pillButton(getString(R.string.btn_color_apply)) {
-                val n = ThemeStore.normalize(hex.text.toString())
-                if (n == null) {
-                    toastMsg(R.string.theme_bad_hex)
-                } else {
-                    WP.setColor(this, picked, n)
-                    refreshWidgets()
-                    renderPalettes()
-                }
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+            label(getString(R.string.color_modes_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
-        palettesBox.addView(
-            pillButton(getString(R.string.btn_color_reset)) {
-                WP.setColor(this, picked, null)
-                refreshWidgets()
-                renderPalettes()
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        palettesBox.addView(label(getString(R.string.color_modes_hint), 13f, Palette.dim.toArgb()))
+        val modeNames = listOf(
+            "shuffle_on" to R.string.mode_shuffle_on,
+            "shuffle_off" to R.string.mode_shuffle_off,
+            "repeat_off" to R.string.mode_repeat_off,
+            "repeat_all" to R.string.mode_repeat_all,
+            "repeat_one" to R.string.mode_repeat_one,
         )
+        addColorEditor(modeNames, modePick) {
+            modePick = it
+            renderPalettes()
+        }
 
         // Полоска и время
         palettesBox.addView(
@@ -725,6 +698,55 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Выбор кнопки или режима из списка, поле #RRGGBB, образцы, применить и вернуть по умолчанию. */
+    private fun addColorEditor(names: List<Pair<String, Int>>, picked: String, onPick: (String) -> Unit) {
+        for ((name, res) in names) {
+            palettesBox.addView(chip(getString(res), name == picked) { onPick(name) })
+        }
+        val hex = EditText(this).apply {
+            setText(WP.color(this@MainActivity, picked)?.let { String.format("#%06X", it and 0xFFFFFF) } ?: "")
+            hint = "#RRGGBB"
+            setTextColor(Palette.text.toArgb())
+            setHintTextColor(Palette.dim.toArgb())
+            setBackgroundColor(Palette.track.toArgb())
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setSingleLine()
+        }
+        palettesBox.addView(hex, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        val swatches = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (h in listOf("#FFFFFF", "#000000", "#F4A9C0", "#7FD1AE", "#8AB4F8", "#FFD166", "#FF7A7A")) {
+            swatches.addView(
+                View(this).apply {
+                    background = shape(android.graphics.Color.parseColor(h), dp(14))
+                    setOnClickListener { hex.setText(h) }
+                },
+                LinearLayout.LayoutParams(dp(28), dp(28)).apply { marginEnd = dp(8) },
+            )
+        }
+        palettesBox.addView(swatches, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        palettesBox.addView(
+            pillButton(getString(R.string.btn_color_apply)) {
+                val n = ThemeStore.normalize(hex.text.toString())
+                if (n == null) {
+                    toastMsg(R.string.theme_bad_hex)
+                } else {
+                    WP.setColor(this, picked, n)
+                    refreshWidgets()
+                    renderPalettes()
+                }
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        palettesBox.addView(
+            pillButton(getString(R.string.btn_color_reset)) {
+                WP.setColor(this, picked, null)
+                refreshWidgets()
+                renderPalettes()
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+    }
+
     private fun confirmReset() {
         AlertDialog.Builder(this)
             .setTitle(R.string.reset_title)
@@ -921,6 +943,7 @@ class MainActivity : Activity() {
     private val headerTag = "header"
     private val reqBg = 4711
     private var colorPick = "prev"
+    private var modePick = "shuffle_on"
     private val reqExport = 4712
     private val reqImport = 4713
 

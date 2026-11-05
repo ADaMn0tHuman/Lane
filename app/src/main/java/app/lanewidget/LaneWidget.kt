@@ -402,7 +402,12 @@ private fun Controls(s: MediaState, showMini: Boolean) {
             ) {
                 Cell(26.dp) {
                     if (WP.shown(ctx, WP.SHUFFLE)) {
-                        MiniButton(R.drawable.ic_shuffle, "shuffle", miniTint(s.shuffleSupported, s.shuffleOn))
+                        MiniButton(
+                            R.drawable.ic_shuffle, "shuffle",
+                            miniTint(s.shuffleSupported, s.shuffleOn),
+                            if (s.shuffleOn) "shuffle_on" else "shuffle_off",
+                            s.shuffleOn && s.shuffleSupported,
+                        )
                     }
                 }
                 Cell(26.dp) { }
@@ -412,6 +417,12 @@ private fun Controls(s: MediaState, showMini: Boolean) {
                             if (s.repeatMode == 1) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
                             "repeat",
                             miniTint(s.repeatSupported, s.repeatMode != 0),
+                            when (s.repeatMode) {
+                                1 -> "repeat_one"
+                                2 -> "repeat_all"
+                                else -> "repeat_off"
+                            },
+                            s.repeatMode != 0 && s.repeatSupported,
                         )
                     }
                 }
@@ -490,16 +501,26 @@ private fun SideButton(res: Int, cmd: String, tint: Color) {
     }
 }
 
-/** Маленькая кнопка нижнего ряда. Неподдерживаемая плеером кнопка остаётся серой. */
+/**
+ * Маленькая кнопка нижнего ряда. Цвет берётся для текущего состояния (modeKey), если его задали.
+ * Пока режим включён, под иконкой лёгкая подложка того же цвета. Неподдерживаемая кнопка серая.
+ */
 @Composable
-private fun MiniButton(res: Int, cmd: String, tint: Color) {
+private fun MiniButton(res: Int, cmd: String, tint: Color, modeKey: String? = null, on: Boolean = false) {
     val ctx = LocalContext.current
-    val custom = btnCustom(ctx, cmd)
+    val custom = if (modeKey != null && Palette.autoButton == null) {
+        WP.color(ctx, modeKey)?.let { Color(it) } ?: btnCustom(ctx, cmd)
+    } else {
+        btnCustom(ctx, cmd)
+    }
     val color = if (custom == null || tint == Palette.muted) tint else custom
+    val plate = if (on && tint != Palette.muted) color.copy(alpha = 0.22f) else Color.Transparent
     Box(
         modifier = GlanceModifier
             .width(40.dp)
             .height(26.dp)
+            .background(ColorProvider(plate))
+            .cornerRadius(13.dp)
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to cmd))),
         contentAlignment = Alignment.Center,
     ) {
