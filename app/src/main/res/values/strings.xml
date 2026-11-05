@@ -113,7 +113,7 @@
     <string name="btn_switch">Значок смены плеера</string>
     <string name="btn_prev">Назад</string>
     <string name="btn_next">Вперёд</string>
-    <string name="bg_title">Фон виджета</string>
+    <string name="widget_bg_title">Фон виджета</string>
     <string name="trans_on">Прозрачность фона</string>
     <string name="trans_value">Прозрачность: %1$d%%</string>
     <string name="photo_on">Своё фото на фон: включено</string>
@@ -133,4 +133,12 @@
     <string name="update_channel">Обновления</string>
     <string name="update_notify_title">Вышла новая версия Lane Widget</string>
     <string name="update_notify_text">Открой приложение и нажми «Проверить обновление»</string>
+    <string name="style_title">Стиль виджета</string>
+    <string name="style_classic">Классический</string>
+    <string name="style_glass">Стекло</string>
+    <string name="glass_hint">В стекле кнопки становятся пузырями, а выбранные элементы полупрозрачными. Размытия в виджете нет, поэтому эффект упрощённый.</string>
+    <string name="glass_buttons">Кнопки-пузыри</string>
+    <string name="glass_bg">Прозрачный фон</string>
+    <string name="glass_bar">Прозрачная полоска</string>
+    <string name="glass_cover">Обложка в стеклянной рамке</string>
 </resources>
