@@ -201,36 +201,50 @@ internal fun openIntent(s: MediaState): Intent? {
     }
 }
 
+/** Обрезает текст многоточием, если он не вмещается. Ширина приблизительная, по размеру виджета. */
+private fun fit(text: String, max: Int): String =
+    if (text.length <= max) text else text.take(max - 1).trimEnd() + "…"
+
 @Composable
 private fun WidgetContent(s: MediaState) {
+    val ctx = LocalContext.current
     val launch = openIntent(s)
+    val size = LocalSize.current
+    val pxW = if (size.width.value < 10f) 1080 else (size.width.value * 3).toInt().coerceAtMost(1080)
+    val pxH = if (size.height.value < 10f) 408 else (size.height.value * 3).toInt().coerceAtMost(1080)
+
+    // Фон: своё фото имеет приоритет, затем размытая обложка, затем цвет пака. Прозрачность общая.
+    val alpha = Background.alpha(ctx)
+    val photo = Background.layer(ctx, pxW, pxH)
+    val blur = if (photo == null) s.blurBg?.let { Background.withAlpha(it, pxW, pxH, alpha) } else null
+    val hasImage = photo != null || blur != null
+    val cardColor = if (hasImage) Color.Transparent
+        else Color(Background.withAlphaArgb(Palette.cardArgb, alpha))
+
+    val textWidth = size.width.value - 24f - 92f - 6f
+    val titleMax = (textWidth / 9.5f).toInt().coerceAtLeast(6)
+    val artistMax = (textWidth / 7.5f).toInt().coerceAtLeast(6)
 
     val root = GlanceModifier
         .fillMaxSize()
-        .background(ColorProvider(Palette.card))
+        .background(ColorProvider(cardColor))
         .cornerRadius(30.dp)
         .let { if (launch != null) it.clickable(actionStartActivity(launch)) else it }
 
     Box(modifier = root) {
-        val blur = s.blurBg
-        if (blur != null) {
+        photo?.let {
             Image(
-                provider = ImageProvider(blur),
+                provider = ImageProvider(it),
                 contentDescription = null,
                 modifier = GlanceModifier.fillMaxSize().cornerRadius(30.dp),
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.FillBounds,
             )
         }
-        // Наклейки: над фоном, под текстом и кнопками. Слой строится под фактический размер виджета,
-        // поэтому картинка не растягивается. Нажатия проходят сквозь неё.
-        val box = LocalSize.current
-        val w = if (box.width.value < 10f) 1080 else (box.width.value * 3).toInt().coerceAtMost(1080)
-        val h = if (box.height.value < 10f) 408 else (box.height.value * 3).toInt().coerceAtMost(1080)
-        Sticker.layer(LocalContext.current, w, h)?.let { layer ->
+        blur?.let {
             Image(
-                provider = ImageProvider(layer),
+                provider = ImageProvider(it),
                 contentDescription = null,
-                modifier = GlanceModifier.fillMaxSize(),
+                modifier = GlanceModifier.fillMaxSize().cornerRadius(30.dp),
                 contentScale = ContentScale.FillBounds,
             )
         }
@@ -240,19 +254,20 @@ private fun WidgetContent(s: MediaState) {
                 .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Обложка 92 dp (была 84, +10 %). Текст начинается на том же расстоянии от края: 12 + 92 + 6 = 110 dp.
-            // Значок плеера под обложкой слева. 92 + 4 + 32 = 128 dp, что помещается в виджет 136 dp.
+            // Обложка 92 dp. Текст начинается на расстоянии 12 + 92 + 6 = 110 dp от края.
             Column(horizontalAlignment = Alignment.Start) {
                 Cover(s, 92.dp, 20.dp)
-                Spacer(modifier = GlanceModifier.height(4.dp))
-                AppBadge(s, 32.dp)
+                if (WP.shown(ctx, WP.SWITCH) && s.appIcon != null) {
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+                    AppBadge(s, 32.dp)
+                }
             }
             Column(
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight().padding(start = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = s.title,
+                    text = fit(s.title, titleMax),
                     maxLines = 1,
                     style = TextStyle(
                         color = ColorProvider(Palette.text),
@@ -261,15 +276,15 @@ private fun WidgetContent(s: MediaState) {
                     ),
                 )
                 Text(
-                    text = s.artist,
+                    text = fit(s.artist, artistMax),
                     maxLines = 1,
                     style = TextStyle(color = ColorProvider(Palette.pink), fontSize = 13.sp),
                 )
                 Spacer(modifier = GlanceModifier.height(3.dp))
                 ProgressRow(s)
                 Spacer(modifier = GlanceModifier.height(2.dp))
-                // Второй ряд (перемешать, повтор, скачать) скрывается только на очень низком виджете.
-                Controls(s, showMini = LocalSize.current.height >= 120.dp)
+                // Второй ряд скрывается только на очень низком виджете.
+                Controls(s, showMini = size.height.value >= 120f)
             }
         }
     }
@@ -349,50 +364,55 @@ private fun ProgressRow(s: MediaState) {
 }
 
 /**
- * Две строки по четыре равные ячейки.
- * Сверху: назад, играть/пауза, вперёд, «нравится» (плюс или галочка).
- * Снизу: перемешать под «назад», повтор под «вперёд», скачать под «нравится».
+ * Две строки по четыре ячейки. Скрытая кнопка оставляет пустую ячейку, поэтому остальные
+ * не съезжают. Кнопка «играть» есть всегда.
  */
 @Composable
-private fun Controls(s: MediaState, showMini: Boolean = true) {
+private fun Controls(s: MediaState, showMini: Boolean) {
+    val ctx = LocalContext.current
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cell(40.dp) { SideButton(R.drawable.ic_prev, "prev", Palette.text) }
+            Cell(40.dp) { if (WP.shown(ctx, WP.PREV)) SideButton(R.drawable.ic_prev, "prev", Palette.text) }
             Cell(40.dp) { PlayButton(s.playing, 40.dp) }
-            Cell(40.dp) { SideButton(R.drawable.ic_next, "next", Palette.text) }
+            Cell(40.dp) { if (WP.shown(ctx, WP.NEXT)) SideButton(R.drawable.ic_next, "next", Palette.text) }
             Cell(40.dp) {
-                if (s.liked) {
-                    SideButton(R.drawable.ic_check, "like", Palette.pink)
-                } else {
-                    SideButton(R.drawable.ic_plus, "like", Palette.text)
+                if (WP.shown(ctx, WP.LIKE)) {
+                    if (s.liked) {
+                        SideButton(R.drawable.ic_check, "like", Palette.pink)
+                    } else {
+                        SideButton(R.drawable.ic_plus, "like", Palette.text)
+                    }
                 }
             }
         }
-        if (showMini) Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Cell(26.dp) {
-                MiniButton(
-                    R.drawable.ic_shuffle, "shuffle",
-                    miniTint(s.shuffleSupported, s.shuffleOn),
-                )
-            }
-            Cell(26.dp) { }
-            Cell(26.dp) {
-                MiniButton(
-                    if (s.repeatMode == 1) R.drawable.ic_repeat_one else R.drawable.ic_repeat, "repeat",
-                    miniTint(s.repeatSupported, s.repeatMode != 0),
-                )
-            }
-            Cell(26.dp) {
-                MiniButton(
-                    R.drawable.ic_download, "download",
-                    miniTint(s.downloadSupported, s.downloaded),
-                )
+        if (showMini) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Cell(26.dp) {
+                    if (WP.shown(ctx, WP.SHUFFLE)) {
+                        MiniButton(R.drawable.ic_shuffle, "shuffle", miniTint(s.shuffleSupported, s.shuffleOn))
+                    }
+                }
+                Cell(26.dp) { }
+                Cell(26.dp) {
+                    if (WP.shown(ctx, WP.REPEAT)) {
+                        MiniButton(
+                            if (s.repeatMode == 1) R.drawable.ic_repeat_one else R.drawable.ic_repeat,
+                            "repeat",
+                            miniTint(s.repeatSupported, s.repeatMode != 0),
+                        )
+                    }
+                }
+                Cell(26.dp) {
+                    if (WP.shown(ctx, WP.DOWNLOAD)) {
+                        MiniButton(R.drawable.ic_download, "download", miniTint(s.downloadSupported, s.downloaded))
+                    }
+                }
             }
         }
     }

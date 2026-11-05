@@ -94,6 +94,21 @@ object UpdateChecker {
         }.start()
     }
 
+    /** Номер последней сборки на GitHub или null, если проверить не удалось. Нужно фоновой проверке. */
+    fun latestRemote(ctx: Context): Long? {
+        val probe = (URL("$REPO/releases/latest").openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("User-Agent", "LaneWidget")
+        }
+        val code = probe.responseCode
+        val finalUrl = probe.url.toString()
+        probe.disconnect()
+        if (code != 200 || !finalUrl.contains("/releases/tag/")) return null
+        return finalUrl.substringAfterLast("/releases/tag/").removePrefix("v").toLongOrNull()
+    }
+
     /** Подпись скачанного APK должна совпадать с подписью установленной версии, иначе установка не пройдёт. */
     @Suppress("DEPRECATION")
     private fun signaturesMatch(ctx: Context, file: File): Boolean {

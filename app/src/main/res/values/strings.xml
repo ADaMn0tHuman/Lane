@@ -103,4 +103,34 @@
     <string name="sticker_drag_hint">Перетаскивай наклейку пальцем по предпросмотру. На самом виджете двигать нельзя.</string>
     <string name="sticker_item">Наклейка %1$d</string>
     <string name="sticker_limit">Можно добавить до 5 наклеек</string>
+
+    <string name="buttons_title">Кнопки виджета</string>
+    <string name="buttons_hint">Нажми, чтобы убрать или вернуть кнопку. Кнопка «играть» всегда на месте.</string>
+    <string name="btn_like">Лайк</string>
+    <string name="btn_download">Скачать</string>
+    <string name="btn_repeat">Цикл</string>
+    <string name="btn_shuffle">Перемешать</string>
+    <string name="btn_switch">Значок смены плеера</string>
+    <string name="btn_prev">Назад</string>
+    <string name="btn_next">Вперёд</string>
+    <string name="bg_title">Фон виджета</string>
+    <string name="trans_on">Прозрачность фона</string>
+    <string name="trans_value">Прозрачность: %1$d%%</string>
+    <string name="photo_on">Своё фото на фон: включено</string>
+    <string name="photo_off">Своё фото на фон: выключено</string>
+    <string name="photo_pick">Выбрать фото (любое, лучше горизонтальное)</string>
+    <string name="photo_remove">Удалить фото</string>
+    <string name="photo_none">Сначала выбери фото</string>
+    <string name="bg_bad">Не удалось открыть фото</string>
+    <string name="zoom_value">Приближение: %1$d%%</string>
+    <string name="dx_value">Сдвиг по горизонтали: %1$d%%</string>
+    <string name="dy_value">Сдвиг по вертикали: %1$d%%</string>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_export">Экспорт настроек в файл</string>
+    <string name="settings_import">Импорт настроек из файла</string>
+    <string name="settings_exported">Настройки сохранены</string>
+    <string name="settings_failed">Не удалось. Проверь файл и попробуй снова</string>
+    <string name="update_channel">Обновления</string>
+    <string name="update_notify_title">Вышла новая версия Lane Widget</string>
+    <string name="update_notify_text">Открой приложение и нажми «Проверить обновление»</string>
 </resources>

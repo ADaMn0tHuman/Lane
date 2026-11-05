@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeStore.apply(this)
+        UpdateWorker.schedule(this)
 
         val bg = Palette.screenBg.toArgb()
         window.statusBarColor = bg
@@ -252,123 +253,112 @@ class MainActivity : Activity() {
             )
         }
 
-        // Наклейки на большой виджет
+        // Кнопки виджета: каждую можно скрыть. По умолчанию все включены.
         palettesBox.addView(
-            label(getString(R.string.sticker_title), 16f, Palette.text.toArgb(), bold = true)
+            label(getString(R.string.buttons_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
-        val stickerOn = Sticker.isOn(this)
-        palettesBox.addView(
-            chip(if (stickerOn) getString(R.string.sticker_on) else getString(R.string.sticker_off), stickerOn) {
-                if (!Sticker.hasAny(this)) {
-                    toastMsg(R.string.sticker_none)
-                } else {
-                    Sticker.setOn(this, !stickerOn)
-                    refreshWidgets()
-                    renderPalettes()
-                }
-            },
+        palettesBox.addView(label(getString(R.string.buttons_hint), 13f, Palette.dim.toArgb()))
+        val buttonKeys = listOf(
+            WP.LIKE to R.string.btn_like,
+            WP.DOWNLOAD to R.string.btn_download,
+            WP.REPEAT to R.string.btn_repeat,
+            WP.SHUFFLE to R.string.btn_shuffle,
+            WP.SWITCH to R.string.btn_switch,
+            WP.PREV to R.string.btn_prev,
+            WP.NEXT to R.string.btn_next,
         )
-
-        val items = Sticker.items(this)
-        val selected = Sticker.selected(this)
-        items.forEachIndexed { i, item ->
-            val on = selected?.id == item.id
-            val name = getString(R.string.sticker_item, i + 1)
-            palettesBox.addView(chip(if (on) "$name ✓" else name, on) {
-                Sticker.setSelected(this, item.id)
+        for ((key, res) in buttonKeys) {
+            val on = WP.shown(this, key)
+            palettesBox.addView(chip(getString(res), on) {
+                WP.setShown(this, key, !on)
+                refreshWidgets()
                 renderPalettes()
             })
         }
 
+        // Фон: прозрачность и своё фото 4 на 2
         palettesBox.addView(
-            pillButton(getString(R.string.sticker_pick)) {
-                if (Sticker.items(this).size >= Sticker.MAX_ITEMS) toastMsg(R.string.sticker_limit) else pickSticker()
-            },
+            label(getString(R.string.bg_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        val transOn = Background.transparencyOn(this)
+        palettesBox.addView(chip(getString(R.string.trans_on), transOn) {
+            Background.setBool(this, Background.KEY_TRANS_ON, !transOn)
+            refreshWidgets()
+            renderPalettes()
+        })
+        if (transOn) {
+            palettesBox.addView(
+                slider({ getString(R.string.trans_value, it) }, 0, 90, Background.transparency(this)) {
+                    Background.setInt(this, Background.KEY_TRANS, it)
+                    refreshWidgets()
+                },
+            )
+        }
+
+        val photoOn = Background.customOn(this)
+        palettesBox.addView(chip(if (photoOn) getString(R.string.photo_on) else getString(R.string.photo_off), photoOn) {
+            if (!Background.hasCustomFile(this)) {
+                toastMsg(R.string.photo_none)
+            } else {
+                Background.setBool(this, Background.KEY_CUSTOM_ON, !photoOn)
+                refreshWidgets()
+                renderPalettes()
+            }
+        })
+        palettesBox.addView(
+            pillButton(getString(R.string.photo_pick)) { pickImage(reqBg) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
         )
-
-        if (selected != null) {
-            val sel = selected.id
+        if (Background.hasCustomFile(this)) {
+            val photoPreview = ImageView(this).apply {
+                background = shape(Palette.cardArgb, dp(12))
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(Background.layer(this@MainActivity, 720, 360, true))
+            }
             palettesBox.addView(
-                pillButton(getString(R.string.sticker_remove)) {
-                    Sticker.remove(this, sel)
+                photoPreview,
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(90)).apply { topMargin = dp(8) },
+            )
+            palettesBox.addView(slider({ getString(R.string.zoom_value, it) }, 100, 300, Background.zoom(this)) {
+                Background.setInt(this, Background.KEY_ZOOM, it)
+                photoPreview.setImageBitmap(Background.layer(this@MainActivity, 720, 360, true))
+                refreshWidgets()
+            })
+            palettesBox.addView(slider({ getString(R.string.dx_value, it) }, -50, 50, Background.dx(this)) {
+                Background.setInt(this, Background.KEY_DX, it)
+                photoPreview.setImageBitmap(Background.layer(this@MainActivity, 720, 360, true))
+                refreshWidgets()
+            })
+            palettesBox.addView(slider({ getString(R.string.dy_value, it) }, -50, 50, Background.dy(this)) {
+                Background.setInt(this, Background.KEY_DY, it)
+                photoPreview.setImageBitmap(Background.layer(this@MainActivity, 720, 360, true))
+                refreshWidgets()
+            })
+            palettesBox.addView(
+                pillButton(getString(R.string.photo_remove)) {
+                    Background.removeCustom(this)
                     refreshWidgets()
                     renderPalettes()
                 },
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
             )
-
-            palettesBox.addView(
-                label(getString(R.string.sticker_drag_hint), 13f, Palette.dim.toArgb()),
-            )
-            val stickerPreview = ImageView(this).apply {
-                background = shape(Palette.card.toArgb(), dp(16))
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageBitmap(Sticker.layer(this@MainActivity, 720, 272, true))
-                // Палец двигает выбранную наклейку. Прокрутку страницы на время касания отключаем.
-                setOnTouchListener { v, e ->
-                    when (e.actionMasked) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            v.parent?.requestDisallowInterceptTouchEvent(true)
-                            val (nx, ny) = touchToLayer(v, e.x, e.y)
-                            Sticker.update(this@MainActivity, sel) { it.copy(x = nx, y = ny) }
-                            (v as ImageView).setImageBitmap(Sticker.layer(this@MainActivity, 720, 272, true))
-                            true
-                        }
-                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                            refreshWidgets()
-                            true
-                        }
-                        else -> false
-                    }
-                }
-            }
-            palettesBox.addView(
-                stickerPreview,
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(110)).apply { topMargin = dp(6) },
-            )
-
-            val sizeLabel = label(getString(R.string.sticker_size, selected.scale), 13f, Palette.dim.toArgb())
-            palettesBox.addView(sizeLabel.apply { setPadding(0, dp(10), 0, 0) })
-            palettesBox.addView(
-                SeekBar(this).apply {
-                    max = 90
-                    progress = selected.scale - 10
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
-                            sizeLabel.text = getString(R.string.sticker_size, p + 10)
-                        }
-                        override fun onStartTrackingTouch(sb: SeekBar) {}
-                        override fun onStopTrackingTouch(sb: SeekBar) {
-                            Sticker.update(this@MainActivity, sel) { it.copy(scale = sb.progress + 10) }
-                            stickerPreview.setImageBitmap(Sticker.layer(this@MainActivity, 720, 272, true))
-                            refreshWidgets()
-                        }
-                    })
-                },
-            )
-
-            val rotLabel = label(getString(R.string.sticker_rot, selected.rot), 13f, Palette.dim.toArgb())
-            palettesBox.addView(rotLabel.apply { setPadding(0, dp(10), 0, 0) })
-            palettesBox.addView(
-                SeekBar(this).apply {
-                    max = 360
-                    progress = selected.rot + 180
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
-                            rotLabel.text = getString(R.string.sticker_rot, p - 180)
-                        }
-                        override fun onStartTrackingTouch(sb: SeekBar) {}
-                        override fun onStopTrackingTouch(sb: SeekBar) {
-                            Sticker.update(this@MainActivity, sel) { it.copy(rot = sb.progress - 180) }
-                            stickerPreview.setImageBitmap(Sticker.layer(this@MainActivity, 720, 272, true))
-                            refreshWidgets()
-                        }
-                    })
-                },
-            )
         }
+
+        // Экспорт и импорт всех настроек
+        palettesBox.addView(
+            label(getString(R.string.settings_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        palettesBox.addView(
+            pillButton(getString(R.string.settings_export)) { createFile(reqExport, "lane-widget-settings.json") },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        palettesBox.addView(
+            pillButton(getString(R.string.settings_import)) { openJson(reqImport) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
 
         palettesBox.addView(
             label(getString(R.string.preview_title), 16f, Palette.text.toArgb(), bold = true)
@@ -539,23 +529,74 @@ class MainActivity : Activity() {
         return ((x - left) / drawnW).coerceIn(0f, 1f) to ((y - top) / drawnH).coerceIn(0f, 1f)
     }
 
-    private fun pickSticker() {
+    /** Ползунок с подписью. Значение применяется при отпускании. */
+    private fun slider(title: (Int) -> String, lo: Int, hi: Int, value: Int, onStop: (Int) -> Unit): LinearLayout {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val caption = label(title(value), 13f, Palette.dim.toArgb()).apply { setPadding(0, dp(10), 0, 0) }
+        box.addView(caption)
+        box.addView(
+            SeekBar(this).apply {
+                max = hi - lo
+                progress = value - lo
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: SeekBar, p: Int, fromUser: Boolean) {
+                        caption.text = title(p + lo)
+                    }
+                    override fun onStartTrackingTouch(sb: SeekBar) {}
+                    override fun onStopTrackingTouch(sb: SeekBar) {
+                        onStop(sb.progress + lo)
+                    }
+                })
+            },
+        )
+        return box
+    }
+
+    private fun pickImage(requestCode: Int) {
         startActivityForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"),
-            reqSticker,
+            requestCode,
+        )
+    }
+
+    private fun createFile(requestCode: Int, name: String) {
+        startActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/json")
+                .putExtra(Intent.EXTRA_TITLE, name),
+            requestCode,
+        )
+    }
+
+    private fun openJson(requestCode: Int) {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),
+            requestCode,
         )
     }
 
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != reqSticker || resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        if (Sticker.add(this, uri)) {
-            refreshWidgets()
-            renderPalettes()
-        } else {
-            toastMsg(R.string.sticker_bad)
+        when (requestCode) {
+            reqBg -> if (Background.importFrom(this, uri)) {
+                refreshWidgets()
+                renderPalettes()
+            } else {
+                toastMsg(R.string.bg_bad)
+            }
+            reqExport -> toastMsg(
+                if (SettingsIO.export(this, uri)) R.string.settings_exported else R.string.settings_failed,
+            )
+            reqImport -> if (SettingsIO.import(this, uri)) {
+                refreshWidgets()
+                recreate()
+            } else {
+                toastMsg(R.string.settings_failed)
+            }
         }
     }
 
@@ -736,7 +777,9 @@ class MainActivity : Activity() {
     }
 
     private val headerTag = "header"
-    private val reqSticker = 4711
+    private val reqBg = 4711
+    private val reqExport = 4712
+    private val reqImport = 4713
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
         this.text = text

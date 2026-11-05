@@ -256,12 +256,40 @@ object MediaRepo {
     private fun blurFrom(cover: Bitmap, key: String): Bitmap {
         if (key == blurKey) blurBitmap?.let { return it }
         // Несколько ступеней уменьшения и увеличения: так размытие получается мягким, без квадратиков.
-        var big = Bitmap.createScaledBitmap(cover, 24, 24, true)
-        for (sz in intArrayOf(48, 96, 192, 320)) big = Bitmap.createScaledBitmap(big, sz, sz, true)
+        // Уменьшаем до 48×48, несколько раз размываем коробчатым фильтром и растягиваем.
+        // Поэтому квадратиков почти нет: на маленькой сетке размытие уже мягкое.
+        val n = 48
+        val px = IntArray(n * n)
+        Bitmap.createScaledBitmap(cover, n, n, true).getPixels(px, 0, n, 0, 0, n, n)
+        repeat(3) { boxBlur(px, n, 3) }
+        val small = Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888)
+        val big = Bitmap.createScaledBitmap(small, 320, 320, true)
         Canvas(big).drawColor(0x8C000000.toInt())
         blurKey = key
         blurBitmap = big
         return big
+    }
+
+    /** Коробчатое размытие по строкам и столбцам. */
+    private fun boxBlur(px: IntArray, n: Int, r: Int) {
+        val tmp = IntArray(n * n)
+        val c = 2 * r + 1
+        for (y in 0 until n) for (x in 0 until n) {
+            var sr = 0; var sg = 0; var sb = 0
+            for (k in -r..r) {
+                val p = px[y * n + (x + k).coerceIn(0, n - 1)]
+                sr += (p shr 16) and 0xFF; sg += (p shr 8) and 0xFF; sb += p and 0xFF
+            }
+            tmp[y * n + x] = (0xFF shl 24) or ((sr / c) shl 16) or ((sg / c) shl 8) or (sb / c)
+        }
+        for (y in 0 until n) for (x in 0 until n) {
+            var sr = 0; var sg = 0; var sb = 0
+            for (k in -r..r) {
+                val p = tmp[(y + k).coerceIn(0, n - 1) * n + x]
+                sr += (p shr 16) and 0xFF; sg += (p shr 8) and 0xFF; sb += p and 0xFF
+            }
+            px[y * n + x] = (0xFF shl 24) or ((sr / c) shl 16) or ((sg / c) shl 8) or (sb / c)
+        }
     }
 
     /** Самый насыщенный из достаточно ярких цветов обложки. */

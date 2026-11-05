@@ -45,6 +45,7 @@ object Palette {
     }
 
     val card: Color get() = Color(_bg)
+    val cardArgb: Int get() = _bg
     val screenBg: Color get() = Color(_bg)
     val cover: Color get() = Color(mix(_bg, _text, 0.07f))
     val track: Color get() = Color(mix(_bg, _text, 0.2f))
