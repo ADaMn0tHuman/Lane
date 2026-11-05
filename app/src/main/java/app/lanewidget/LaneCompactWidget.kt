@@ -68,6 +68,7 @@ private fun CompactContent(s: MediaState) {
     val photo = Background.layer(ctx, pxW, pxH)
     val cover = if (photo == null) s.blurBg?.let { Background.coverLayer(ctx, it, pxW, pxH) } else null
     val hasImage = photo != null || cover != null
+    Palette.setAutoButton(if (WP.flag(ctx, WP.AUTO_BTN, false)) AutoColor.pick(photo ?: cover, Palette.cardArgb) else null)
     val card = if (hasImage) Color.Transparent
         else Color(Background.withAlphaArgb(Palette.cardArgb, Background.alpha(ctx)))
 

@@ -21,6 +21,15 @@ object Palette {
         _override = null
     }
 
+    private var _autoBtn: Int? = null
+
+    /** Цвет кнопок от автоподбора или null. Ставится перед отрисовкой виджета, ручной цвет при нём не учитывается. */
+    fun setAutoButton(c: Int?) {
+        _autoBtn = c
+    }
+
+    val autoButton: Int? get() = _autoBtn
+
     /** Акцент из обложки или null, чтобы брать акцент пака. */
     fun setAccent(c: Int?) {
         _override = c

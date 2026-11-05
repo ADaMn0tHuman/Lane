@@ -157,4 +157,11 @@
     <string name="reset_done">Настройки сброшены</string>
     <string name="widget_need_access">Выдай доступ к уведомлениям</string>
     <string name="widget_need_access_hint">Нажми, чтобы открыть настройки</string>
+    <string name="btn_color_title">Цвет кнопки</string>
+    <string name="btn_color_apply">Применить цвет</string>
+    <string name="btn_color_reset">Вернуть цвет по умолчанию</string>
+    <string name="btn_play">Кнопка «играть»</string>
+    <string name="auto_btn_on">Подбирать цвет из обложки: включено</string>
+    <string name="auto_btn_off">Подбирать цвет из обложки: выключено</string>
+    <string name="auto_btn_hint">Ручной цвет не применяется, пока включён автоподбор. Цвет подбирается под фон, на котором стоят кнопки.</string>
 </resources>

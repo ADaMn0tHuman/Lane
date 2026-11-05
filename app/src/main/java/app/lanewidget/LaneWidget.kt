@@ -217,6 +217,8 @@ private fun WidgetContent(s: MediaState) {
     val alpha = Background.alpha(ctx)
     val photo = Background.layer(ctx, pxW, pxH)
     val blur = if (photo == null) s.blurBg?.let { Background.coverLayer(ctx, it, pxW, pxH) } else null
+    // Автоподбор цвета кнопок под фон. Если он включён, ручные цвета не применяются.
+    Palette.setAutoButton(if (WP.flag(ctx, WP.AUTO_BTN, false)) AutoColor.pick(photo ?: blur, Palette.cardArgb) else null)
     val hasImage = photo != null || blur != null
     val cardColor = if (hasImage) Color.Transparent
         else Color(Background.withAlphaArgb(Palette.cardArgb, alpha))
@@ -438,12 +440,24 @@ private fun RowScope.Cell(height: Dp, content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/** Цвет кнопки: автоподбор из обложки важнее ручного цвета. */
+private fun btnCustom(ctx: Context, cmd: String): Color? =
+    Palette.autoButton?.let { Color(it) } ?: WP.color(ctx, cmd)?.let { Color(it) }
+
+/** Цвет текста и иконки поверх цветной кнопки: тёмный на светлом фоне, светлый на тёмном. */
+private fun onColorFor(c: Color): Color {
+    val lum = c.red * 0.299f + c.green * 0.587f + c.blue * 0.114f
+    return if (lum > 0.55f) Color(0xFF1A1A1A) else Color(0xFFFFFFFF)
+}
+
 @Composable
 internal fun PlayButton(playing: Boolean, size: Dp) {
+    val ctx = LocalContext.current
+    val custom = btnCustom(ctx, "toggle")
     Box(
         modifier = GlanceModifier
             .size(size)
-            .background(ColorProvider(Palette.pink))
+            .background(ColorProvider(custom ?: Palette.pink))
             .cornerRadius(size / 2)
             .clickable(actionRunCallback<ControlAction>(actionParametersOf(ControlAction.CMD to "toggle"))),
         contentAlignment = Alignment.Center,
@@ -452,13 +466,15 @@ internal fun PlayButton(playing: Boolean, size: Dp) {
             provider = ImageProvider(if (playing) R.drawable.ic_pause else R.drawable.ic_play),
             contentDescription = null,
             modifier = GlanceModifier.size(size / 1.8f),
-            colorFilter = ColorFilter.tint(ColorProvider(Palette.onPink)),
+            colorFilter = ColorFilter.tint(ColorProvider(if (custom != null) onColorFor(custom) else Palette.onPink)),
         )
     }
 }
 
 @Composable
 private fun SideButton(res: Int, cmd: String, tint: Color) {
+    val ctx = LocalContext.current
+    val color = btnCustom(ctx, cmd) ?: tint
     Box(
         modifier = GlanceModifier
             .size(40.dp)
@@ -469,14 +485,17 @@ private fun SideButton(res: Int, cmd: String, tint: Color) {
             provider = ImageProvider(res),
             contentDescription = null,
             modifier = GlanceModifier.size(24.dp),
-            colorFilter = ColorFilter.tint(ColorProvider(tint)),
+            colorFilter = ColorFilter.tint(ColorProvider(color)),
         )
     }
 }
 
-/** Маленькая кнопка нижнего ряда. Область нажатия шире самой иконки. */
+/** Маленькая кнопка нижнего ряда. Неподдерживаемая плеером кнопка остаётся серой. */
 @Composable
 private fun MiniButton(res: Int, cmd: String, tint: Color) {
+    val ctx = LocalContext.current
+    val custom = btnCustom(ctx, cmd)
+    val color = if (custom == null || tint == Palette.muted) tint else custom
     Box(
         modifier = GlanceModifier
             .width(40.dp)
@@ -488,7 +507,7 @@ private fun MiniButton(res: Int, cmd: String, tint: Color) {
             provider = ImageProvider(res),
             contentDescription = null,
             modifier = GlanceModifier.size(18.dp),
-            colorFilter = ColorFilter.tint(ColorProvider(tint)),
+            colorFilter = ColorFilter.tint(ColorProvider(color)),
         )
     }
 }
