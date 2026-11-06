@@ -171,4 +171,14 @@
     <string name="mode_repeat_off">Цикл: выкл</string>
     <string name="mode_repeat_all">Цикл: весь список</string>
     <string name="mode_repeat_one">Цикл: один трек</string>
+    <string name="widget_preview_title">Так виджет выглядит сейчас</string>
+    <string name="preview_title_sample">Название трека</string>
+    <string name="preview_artist_sample">Исполнитель</string>
+    <string name="collapse_all">Свернуть все разделы</string>
+    <string name="expand_all">Развернуть все разделы</string>
+    <string name="reset_part_title">Сброс по разделам</string>
+    <string name="reset_colors_btn">Сбросить цвета</string>
+    <string name="reset_buttons_btn">Сбросить кнопки</string>
+    <string name="reset_bg_btn">Сбросить фон</string>
+    <string name="reset_part_message">Настройки этого раздела будут сброшены. Отменить нельзя.</string>
 </resources>

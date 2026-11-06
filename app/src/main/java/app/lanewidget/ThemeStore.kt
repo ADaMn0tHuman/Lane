@@ -12,6 +12,8 @@ data class Pack(
     val accent: String,
     val text: String,
     val dot: String = "",
+    /** Цвета кнопок и режимов: имя (prev, like, shuffle_on, ...) -> #RRGGBB. Пусто — цвета по умолчанию. */
+    val colors: Map<String, String> = emptyMap(),
 )
 
 object ThemeStore {
@@ -45,23 +47,60 @@ object ThemeStore {
         return if (HEX.matches(t)) t.uppercase() else null
     }
 
-    /** Строка для обмена: «Название: #фон #акцент #текст» или с четвёртым цветом точки. */
+    /** Строка для обмена: «Название: #фон #акцент #текст [#точка] | имя=#цвет ...». */
     fun encode(p: Pack): String = buildString {
         append(p.name).append(": ").append(p.bg).append(' ').append(p.accent).append(' ').append(p.text)
         if (p.dot.isNotEmpty()) append(' ').append(p.dot)
+        if (p.colors.isNotEmpty()) {
+            append(" |")
+            p.colors.toSortedMap().forEach { (k, v) -> append(' ').append(k).append('=').append(v) }
+        }
     }
 
     fun decode(line: String): Pack? {
         val idx = line.indexOf(':')
         if (idx <= 0) return null
         val name = line.substring(0, idx).trim()
-        val parts = line.substring(idx + 1).trim().split(' ', '\t').filter { it.isNotEmpty() }
+        val halves = line.substring(idx + 1).split('|', limit = 2)
+        val parts = halves[0].trim().split(' ', '\t').filter { it.isNotEmpty() }
         if (name.isEmpty() || (parts.size != 3 && parts.size != 4)) return null
         val bg = normalize(parts[0]) ?: return null
         val accent = normalize(parts[1]) ?: return null
         val text = normalize(parts[2]) ?: return null
         val dot = if (parts.size == 4) (normalize(parts[3]) ?: return null) else ""
-        return Pack(name, bg, accent, text, dot)
+        val colors = HashMap<String, String>()
+        if (halves.size == 2) {
+            for (tok in halves[1].trim().split(' ', '\t').filter { it.isNotEmpty() }) {
+                val eq = tok.indexOf('=')
+                if (eq <= 0) return null
+                colors[tok.substring(0, eq)] = normalize(tok.substring(eq + 1)) ?: return null
+            }
+        }
+        return Pack(name, bg, accent, text, dot, colors)
+    }
+
+    /** Текущие цвета кнопок и режимов, чтобы сохранить их в пак. */
+    fun currentColors(ctx: Context): Map<String, String> {
+        val out = HashMap<String, String>()
+        for ((k, v) in prefs(ctx).all) {
+            if (k.startsWith("color_") && v is String) out[k.removePrefix("color_")] = v
+        }
+        return out
+    }
+
+    /** Заменяет цвета кнопок и режимов цветами пака. */
+    private fun applyColors(ctx: Context, colors: Map<String, String>) {
+        val p = prefs(ctx)
+        val e = p.edit()
+        for (k in p.all.keys) if (k.startsWith("color_")) e.remove(k)
+        for ((name, hex) in colors) e.putString("color_$name", hex)
+        e.apply()
+    }
+
+    private fun colorsOf(o: JSONObject): Map<String, String> {
+        val out = HashMap<String, String>()
+        o.optJSONObject("colors")?.let { c -> c.keys().forEach { k -> out[k] = c.getString(k) } }
+        return out
     }
 
     fun custom(ctx: Context): List<Pack> {
@@ -76,6 +115,7 @@ object ThemeStore {
                     o.getString("accent"),
                     o.getString("text"),
                     o.optString("dot", ""),
+                    colorsOf(o),
                 )
             }
         } catch (e: Exception) {
@@ -98,6 +138,8 @@ object ThemeStore {
 
     fun setActive(ctx: Context, name: String) {
         prefs(ctx).edit().putString(KEY_ACTIVE, name).apply()
+        // Активация пака ставит его цвета кнопок и режимов.
+        all(ctx).firstOrNull { it.name == name }?.let { applyColors(ctx, it.colors) }
     }
 
     /** Загружает активный пак в Palette. Вызывается перед отрисовкой экранов и виджета. */
@@ -128,7 +170,8 @@ object ThemeStore {
                     .put("bg", it.bg)
                     .put("accent", it.accent)
                     .put("text", it.text)
-                    .put("dot", it.dot),
+                    .put("dot", it.dot)
+                    .put("colors", JSONObject(it.colors)),
             )
         }
         prefs(ctx).edit().putString(KEY_CUSTOM, arr.toString()).apply()

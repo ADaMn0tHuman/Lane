@@ -72,6 +72,9 @@ object MediaRepo {
     private var blurBitmap: Bitmap? = null
     private var coverBitmap: Bitmap? = null
 
+    /** Последняя обложка, нужна для макета виджета в настройках. */
+    fun lastCover(): Bitmap? = coverBitmap
+
     // Кэш уменьшенной обложки, пришедшей картинкой, по отпечатку картинки.
     private var coverCacheKey: String? = null
     private var coverCacheBitmap: Bitmap? = null

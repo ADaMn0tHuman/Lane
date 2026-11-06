@@ -27,6 +27,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.ColorUtils
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -80,6 +81,20 @@ class MainActivity : Activity() {
         )
 
         content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
+        content.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(
+                    pillButton(getString(R.string.collapse_all)) { setFoldAll(true) },
+                    LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(8) },
+                )
+                addView(
+                    pillButton(getString(R.string.expand_all)) { setFoldAll(false) },
+                    LinearLayout.LayoutParams(0, dp(48), 1f),
+                )
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) },
+        )
 
         // Группа: работа в фоне
         content.addView(
@@ -160,6 +175,22 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
         )
 
+        misc.addView(
+            label(getString(R.string.reset_part_title), 16f, Palette.text.toArgb(), bold = true)
+                .apply { setPadding(0, dp(18), 0, dp(4)) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.reset_colors_btn)) { resetColors() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.reset_buttons_btn)) { resetButtons() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
+        misc.addView(
+            pillButton(getString(R.string.reset_bg_btn)) { resetBackground() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
         misc.addView(
             pillButton(getString(R.string.reset_button)) { confirmReset() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(16) },
@@ -254,6 +285,11 @@ class MainActivity : Activity() {
             label(getString(R.string.theme_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(4), 0, dp(4)) },
         )
+        palettesBox.addView(
+            label(getString(R.string.widget_preview_title), 13f, Palette.dim.toArgb())
+                .apply { setPadding(0, dp(4), 0, dp(4)) },
+        )
+        palettesBox.addView(widgetPreview(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
         val active = ThemeStore.active(this)
         for (p in ThemeStore.all(this)) {
             val isOn = p.name == active.name
@@ -532,7 +568,7 @@ class MainActivity : Activity() {
                     name.isEmpty() -> toastMsg(R.string.theme_bad_name)
                     bg == null || accent == null || text == null || dot == null -> toastMsg(R.string.theme_bad_hex)
                     else -> {
-                        val err = ThemeStore.save(this, Pack(name, bg!!, accent!!, text!!, dot ?: ""))
+                        val err = ThemeStore.save(this, Pack(name, bg!!, accent!!, text!!, dot ?: "", ThemeStore.currentColors(this)))
                         when (err) {
                             "builtin" -> toastMsg(R.string.theme_builtin)
                             "name" -> toastMsg(R.string.theme_bad_name)
@@ -594,6 +630,7 @@ class MainActivity : Activity() {
         for (v in views) {
             if (v is TextView && (v.tag == "h1" || v.tag == "h2")) {
                 val title = v.text.toString()
+                foldTitles.add(title)
                 val key = "fold_$title"
                 val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 var collapsed = prefs.getBoolean(key, false)
@@ -746,6 +783,153 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
         )
     }
+
+    /** Полный макет виджета 4×2 в текущих настройках: фон, обложка, кнопки, режимы и полоска. */
+    private fun widgetPreview(): View {
+        val w = 720
+        val h = 360
+        val cover = MediaRepo.lastCover()
+        val photo = Background.layer(this, w, h, true)
+        val blur = if (photo == null && cover != null && ThemeStore.flag(this, ThemeStore.FLAG_BLUR)) {
+            Background.coverLayer(this, cover, w, h)
+        } else {
+            null
+        }
+        val img = photo ?: blur
+        val accentC = Palette.pink.toArgb()
+        val textC = Palette.text.toArgb()
+        val dimC = Palette.dim.toArgb()
+        val auto = if (WP.flag(this, WP.AUTO_BTN, false)) AutoColor.pick(img, Palette.cardArgb) else null
+
+        // Цвет кнопки: автоподбор важнее ручного, как и на самом виджете
+        fun btn(cmd: String, default: Int): Int = auto ?: WP.color(this, cmd) ?: default
+        // Цвет режима: сначала цвет состояния, затем цвет кнопки
+        fun mode(key: String, cmd: String): Int = auto ?: WP.color(this, key) ?: WP.color(this, cmd) ?: dimC
+        fun onColor(c: Int): Int = if (ColorUtils.calculateLuminance(c) > 0.55) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()
+        fun icon(res: Int, color: Int, plate: Boolean = false): ImageView = ImageView(this).apply {
+            setImageResource(res)
+            setColorFilter(color)
+            if (plate) background = shape(ColorUtils.setAlphaComponent(color, 0x38), dp(14))
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+        }
+
+        val frame = FrameLayout(this).apply {
+            if (img == null) background = shape(Palette.card.toArgb(), dp(28))
+        }
+        if (img != null) {
+            frame.addView(
+                ImageView(this).apply {
+                    setImageBitmap(img)
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                },
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+            )
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(
+            ImageView(this).apply {
+                background = shape(Palette.cover.toArgb(), dp(16))
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                if (cover != null) setImageBitmap(cover)
+            },
+            LinearLayout.LayoutParams(dp(84), dp(84)),
+        )
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+        right.addView(TextView(this).apply {
+            text = getString(R.string.preview_title_sample)
+            setTextColor(textC)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setSingleLine()
+            ellipsize = TextUtils.TruncateAt.END
+        })
+        right.addView(TextView(this).apply {
+            text = getString(R.string.preview_artist_sample)
+            setTextColor(accentC)
+            textSize = 13f
+        })
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        bar.addView(View(this).apply { background = shape(accentC, dp(2)) }, LinearLayout.LayoutParams(0, dp(4), 0.45f))
+        bar.addView(View(this).apply { background = shape(Palette.dot.toArgb(), dp(4)) }, LinearLayout.LayoutParams(dp(8), dp(8)))
+        bar.addView(View(this).apply { background = shape(Palette.track.toArgb(), dp(2)) }, LinearLayout.LayoutParams(0, dp(4), 0.55f))
+        right.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(8)).apply { topMargin = dp(8) })
+        top.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        content.addView(top)
+
+        val mainRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val playColor = btn("toggle", accentC)
+        mainRow.addView(icon(R.drawable.ic_prev, btn("prev", textC)), LinearLayout.LayoutParams(0, dp(40), 1f))
+        mainRow.addView(
+            ImageView(this).apply {
+                background = shape(playColor, dp(22))
+                setImageResource(R.drawable.ic_play)
+                setColorFilter(onColor(playColor))
+                setPadding(dp(11), dp(11), dp(11), dp(11))
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f),
+        )
+        mainRow.addView(icon(R.drawable.ic_next, btn("next", textC)), LinearLayout.LayoutParams(0, dp(40), 1f))
+        mainRow.addView(icon(R.drawable.ic_plus, btn("like", textC)), LinearLayout.LayoutParams(0, dp(40), 1f))
+        content.addView(mainRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+
+        // Нижний ряд показан в одном из состояний: перемешать вкл, цикл весь список
+        val miniRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val shuffleC = mode("shuffle_on", "shuffle")
+        val repeatC = mode("repeat_all", "repeat")
+        miniRow.addView(icon(R.drawable.ic_shuffle, shuffleC, plate = true), LinearLayout.LayoutParams(0, dp(30), 1f))
+        miniRow.addView(View(this), LinearLayout.LayoutParams(0, dp(30), 1f))
+        miniRow.addView(icon(R.drawable.ic_repeat, repeatC, plate = true), LinearLayout.LayoutParams(0, dp(30), 1f))
+        miniRow.addView(icon(R.drawable.ic_download, btn("download", dimC)), LinearLayout.LayoutParams(0, dp(30), 1f))
+        content.addView(miniRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+
+        frame.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return frame
+    }
+
+    /** Свернуть или развернуть все разделы сразу. Перерисовка применяет состояние. */
+    private fun setFoldAll(collapsed: Boolean) {
+        val p = getSharedPreferences("lane_widget", MODE_PRIVATE)
+        val e = p.edit()
+        for (t in foldTitles) e.putBoolean("fold_$t", collapsed)
+        e.commit()
+        recreate()
+    }
+
+    private fun resetPart(pick: (String) -> Boolean, extra: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.reset_part_title)
+            .setMessage(R.string.reset_part_message)
+            .setPositiveButton(R.string.reset_button) { _, _ ->
+                val p = getSharedPreferences("lane_widget", MODE_PRIVATE)
+                val e = p.edit()
+                p.all.keys.filter(pick).forEach { e.remove(it) }
+                e.commit()
+                extra()
+                refreshWidgets()
+                toastMsg(R.string.reset_done)
+                recreate()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun resetColors() = resetPart({ it.startsWith("color_") || it == WP.AUTO_BTN }, {})
+
+    private fun resetButtons() = resetPart({ it.startsWith("show_") }, {})
+
+    private fun resetBackground() = resetPart(
+        { it in setOf(
+            Background.KEY_TRANS_ON, Background.KEY_TRANS, Background.KEY_CUSTOM_ON,
+            Background.KEY_ZOOM, Background.KEY_DX, Background.KEY_DY, Background.KEY_BLUR,
+            ThemeStore.FLAG_BLUR,
+        ) },
+        { Background.removeCustom(this) },
+    )
 
     private fun confirmReset() {
         AlertDialog.Builder(this)
@@ -944,6 +1128,7 @@ class MainActivity : Activity() {
     private val reqBg = 4711
     private var colorPick = "prev"
     private var modePick = "shuffle_on"
+    private val foldTitles = HashSet<String>()
     private val reqExport = 4712
     private val reqImport = 4713
 
