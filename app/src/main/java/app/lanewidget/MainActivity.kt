@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var batteryStatus: TextView
     private lateinit var serviceStatus: TextView
     private lateinit var palettesBox: LinearLayout
+    private lateinit var pinnedBox: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -199,12 +200,23 @@ class MainActivity : Activity() {
         content.addView(misc)
 
         makeCollapsible(content)
+        pinnedBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(bg)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
         val scroll = ScrollView(this).apply {
             setBackgroundColor(bg)
             isFillViewport = true
             addView(content)
         }
-        setContentView(scroll)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(bg)
+            addView(pinnedBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        setContentView(root)
     }
 
     override fun onResume() {
@@ -285,11 +297,7 @@ class MainActivity : Activity() {
             label(getString(R.string.theme_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(4), 0, dp(4)) },
         )
-        palettesBox.addView(
-            label(getString(R.string.widget_preview_title), 13f, Palette.dim.toArgb())
-                .apply { setPadding(0, dp(4), 0, dp(4)) },
-        )
-        palettesBox.addView(widgetPreview(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+        refreshPinnedPreview()
         val active = ThemeStore.active(this)
         for (p in ThemeStore.all(this)) {
             val isOn = p.name == active.name
@@ -493,12 +501,6 @@ class MainActivity : Activity() {
             )
         }
 
-        palettesBox.addView(
-            label(getString(R.string.preview_title), 16f, Palette.text.toArgb(), bold = true)
-                .apply { setPadding(0, dp(18), 0, dp(6)) },
-        )
-        val previewBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        palettesBox.addView(previewBox)
 
         palettesBox.addView(
             label(getString(R.string.theme_new), 16f, Palette.text.toArgb(), bold = true)
@@ -532,29 +534,6 @@ class MainActivity : Activity() {
         val dotField = field(getString(R.string.theme_dot_hint), active.dot)
         palettesBox.addView(dotField, lp)
 
-        fun updatePreview() {
-            val bg = ThemeStore.normalize(bgField.text.toString())
-            val accent = ThemeStore.normalize(accentField.text.toString())
-            val fg = ThemeStore.normalize(textField.text.toString())
-            val dotRaw = dotField.text.toString().trim()
-            val dot = if (dotRaw.isEmpty()) fg else ThemeStore.normalize(dotRaw)
-            if (bg != null && accent != null && fg != null && dot != null) {
-                drawPreview(
-                    previewBox,
-                    android.graphics.Color.parseColor(bg),
-                    android.graphics.Color.parseColor(accent),
-                    android.graphics.Color.parseColor(fg),
-                    android.graphics.Color.parseColor(dot),
-                )
-            }
-        }
-        val watcher = object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) = updatePreview()
-        }
-        listOf(bgField, accentField, textField).forEach { it.addTextChangedListener(watcher) }
-        updatePreview()
 
         palettesBox.addView(
             pillButton(getString(R.string.theme_save)) {
@@ -637,6 +616,7 @@ class MainActivity : Activity() {
                 fun paint() {
                     v.text = (if (collapsed) "▸ " else "▾ ") + title
                     container.visibility = if (collapsed) View.GONE else View.VISIBLE
+                    updatePinnedVisibility()
                 }
                 paint()
                 v.setOnClickListener {
@@ -784,12 +764,31 @@ class MainActivity : Activity() {
         )
     }
 
+    /** Макет виджета над прокруткой. Перерисовывается вместе с настройками. */
+    private fun refreshPinnedPreview() {
+        pinnedBox.removeAllViews()
+        pinnedBox.addView(
+            label(getString(R.string.widget_preview_title), 13f, Palette.dim.toArgb())
+                .apply { setPadding(0, 0, 0, dp(4)) },
+        )
+        pinnedBox.addView(widgetPreview(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        updatePinnedVisibility()
+    }
+
+    /** Предпросмотр виден, пока раскрыт раздел «Внешний вид». */
+    private fun updatePinnedVisibility() {
+        if (!::pinnedBox.isInitialized) return
+        val collapsed = getSharedPreferences("lane_widget", MODE_PRIVATE)
+            .getBoolean("fold_" + getString(R.string.group_look), false)
+        pinnedBox.visibility = if (collapsed) View.GONE else View.VISIBLE
+    }
+
     /** Полный макет виджета 4×2 в текущих настройках: фон, обложка, кнопки, режимы и полоска. */
     private fun widgetPreview(): View {
         val w = 720
         val h = 360
         val cover = MediaRepo.lastCover()
-        val photo = Background.layer(this, w, h, true)
+        val photo = if (Background.customOn(this)) Background.layer(this, w, h, true) else null
         val blur = if (photo == null && cover != null && ThemeStore.flag(this, ThemeStore.FLAG_BLUR)) {
             Background.coverLayer(this, cover, w, h)
         } else {
