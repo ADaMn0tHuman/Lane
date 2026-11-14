@@ -103,5 +103,13 @@
                 android:resource="@xml/update_paths" />
         </provider>
 
+        <activity
+            android:name=".NotifySettingsActivity"
+            android:exported="false" />
+
+        <receiver
+            android:name=".NotifyActionReceiver"
+            android:exported="false" />
+
     </application>
 </manifest>

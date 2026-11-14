@@ -48,6 +48,7 @@ object WidgetUpdater {
                 render(app, gm, awm, LaneCompactWidget::class.java) { LaneCompactWidget() }
             }
         }
+        NotifyPlayer.update(app)
         // Идёт плавная смена обложки: просим следующий кадр.
         if (CoverFade.running) {
             delay(60)
