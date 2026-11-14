@@ -181,4 +181,23 @@
     <string name="reset_buttons_btn">Сбросить кнопки</string>
     <string name="reset_bg_btn">Сбросить фон</string>
     <string name="reset_part_message">Настройки этого раздела будут сброшены. Отменить нельзя.</string>
+    <string name="notify_swipe_hint">Свайп вправо — настройки уведомления с музыкой.</string>
+    <string name="notify_title">Уведомление с музыкой</string>
+    <string name="notify_back_hint">Вернуться на главный экран: свайп влево или кнопка «Назад».</string>
+    <string name="notify_section_show">Что показывать</string>
+    <string name="notify_on_on">Уведомление: включено</string>
+    <string name="notify_on_off">Уведомление: выключено</string>
+    <string name="notify_cover_on">Обложка: показывается</string>
+    <string name="notify_cover_off">Обложка: скрыта</string>
+    <string name="notify_bar_on">Полоска и время: показываются</string>
+    <string name="notify_bar_off">Полоска и время: скрыты</string>
+    <string name="notify_skip_on">Кнопки назад и вперёд: показываются</string>
+    <string name="notify_skip_off">Кнопки назад и вперёд: скрыты</string>
+    <string name="notify_lock_on">На экране блокировки: видно</string>
+    <string name="notify_lock_off">На экране блокировки: скрыто</string>
+    <string name="notify_colors">Цвета уведомления</string>
+    <string name="notify_bg_label">Фон (#RRGGBB)</string>
+    <string name="notify_fg_label">Текст (#RRGGBB)</string>
+    <string name="notify_accent_label">Акцент (#RRGGBB)</string>
+    <string name="notify_channel">Плеер</string>
 </resources>
