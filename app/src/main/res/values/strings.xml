@@ -200,4 +200,5 @@
     <string name="notify_fg_label">Текст (#RRGGBB)</string>
     <string name="notify_accent_label">Акцент (#RRGGBB)</string>
     <string name="notify_channel">Плеер</string>
+    <string name="notify_open_btn">Уведомление с музыкой</string>
 </resources>

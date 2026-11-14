@@ -23,6 +23,7 @@ import android.widget.Button
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.ColorUtils
@@ -82,6 +83,13 @@ class MainActivity : Activity() {
         )
 
         content.addView(label(getString(R.string.steps), 15f, Palette.text.toArgb()))
+        content.addView(label(getString(R.string.notify_swipe_hint), 13f, Palette.dim.toArgb()))
+        content.addView(
+            pillButton(getString(R.string.notify_open_btn)) {
+                startActivity(Intent(this, NotifySettingsActivity::class.java))
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(8) },
+        )
         content.addView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -177,6 +185,10 @@ class MainActivity : Activity() {
         )
 
         misc.addView(
+            pillButton(getString(R.string.notify_open_btn)) { startActivity(Intent(this, NotifySettingsActivity::class.java)) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(8) },
+        )
+        misc.addView(
             label(getString(R.string.reset_part_title), 16f, Palette.text.toArgb(), bold = true)
                 .apply { setPadding(0, dp(18), 0, dp(4)) },
         )
@@ -217,6 +229,26 @@ class MainActivity : Activity() {
             addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         setContentView(root)
+    }
+
+    /** Свайп вправо открывает настройки уведомления. Касания видим до прокрутки. */
+    private val swipe by lazy {
+        GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (e1 == null) return false
+                val dx = e2.x - e1.x
+                if (dx > dp(120) && Math.abs(vx) > 800f && Math.abs(vx) > Math.abs(vy) * 1.5f) {
+                    startActivity(Intent(this@MainActivity, NotifySettingsActivity::class.java))
+                    return true
+                }
+                return false
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        swipe.onTouchEvent(ev)
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
